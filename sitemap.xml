@@ -1,0 +1,24 @@
+<urlset xmlns = 'http://www.sitemaps.org/schemas/sitemap/0.9'>
+<url><loc>/404.html</loc></url>
+<url><loc>/articles/index.html</loc></url>
+<url><loc>/articles/ingestion-challenges.html</loc></url>
+<url><loc>/authors.html</loc></url>
+<url><loc>/index.html</loc></url>
+<url><loc>/reference/archetype_taxonomy.html</loc></url>
+<url><loc>/reference/archetype_template.html</loc></url>
+<url><loc>/reference/assign_archetype.html</loc></url>
+<url><loc>/reference/build_feature_table.html</loc></url>
+<url><loc>/reference/build_register_index.html</loc></url>
+<url><loc>/reference/cluster_features.html</loc></url>
+<url><loc>/reference/filter_check_log.html</loc></url>
+<url><loc>/reference/filter_render_log.html</loc></url>
+<url><loc>/reference/index.html</loc></url>
+<url><loc>/reference/lookup_canonical.html</loc></url>
+<url><loc>/reference/model_features.html</loc></url>
+<url><loc>/reference/nlmixr2libingest-package.html</loc></url>
+<url><loc>/reference/parse_registers.html</loc></url>
+<url><loc>/reference/register_db_path.html</loc></url>
+<url><loc>/reference/registers_dir.html</loc></url>
+<url><loc>/reference/render_lookup.html</loc></url>
+</urlset>
+
