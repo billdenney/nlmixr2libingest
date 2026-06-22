@@ -1,0 +1,9 @@
+^vignettes/articles$
+^.*\.Rproj$
+^\.Rproj\.user$
+^LICENSE\.md$
+^\.github$
+^_pkgdown\.yml$
+^docs$
+^pkgdown$
+^\.local-llm-mcp-codeindex\.db$

@@ -1,0 +1,21 @@
+# R build artifacts
+*.Rcheck/
+*.tar.gz
+*.tgz
+src/*.o
+src/*.so
+src/*.dll
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+
+# DuckDB register index cache
+*.duckdb
+*.duckdb.wal
+*.local-llm-mcp-codeindex.db
+
+# vignette render outputs
+inst/doc/
+vignettes/*.html
+vignettes/articles/*.html

@@ -1,0 +1,41 @@
+Package: nlmixr2libingest
+Title: Token-Efficient Ingestion Tooling for the 'nlmixr2lib' Model Library
+Version: 0.0.0.9000
+Authors@R:
+    person("William", "Denney", email = "wdenney@humanpredictions.com",
+           role = c("aut", "cre"))
+Description: Corpus-scale tooling that makes extracting published
+    population pharmacokinetic / pharmacodynamic models into 'nlmixr2lib'
+    cheaper and more reliable. Provides deterministic filtering of R check
+    and vignette-render logs, a fast lookup over the 'nlmixr2lib' canonical
+    name registers (covariate, compartment, and parameter), and -- in later
+    phases -- structural model features, archetype templates, a fittable
+    classifier, and local-LLM-assisted distillation. The package consumes
+    'nlmixr2lib' (its registers, compiled model database, and authoring API)
+    but never reimplements its model validation, which remains in
+    'nlmixr2lib'. Optional local-LLM features degrade gracefully so the
+    package runs with no LLM configured.
+License: GPL (>= 3)
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+Depends:
+    R (>= 4.0)
+Imports:
+    cli,
+    DBI,
+    duckdb,
+    stats,
+    tools,
+    utils
+Suggests:
+    httr2,
+    knitr,
+    nlmixr2lib,
+    rmarkdown,
+    rxode2,
+    testthat (>= 3.0.0),
+    withr
+Config/testthat/edition: 3
+URL: https://github.com/nlmixr2/nlmixr2libingest
+BugReports: https://github.com/nlmixr2/nlmixr2libingest/issues
+Config/roxygen2/version: 8.0.0
