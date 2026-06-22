@@ -8,6 +8,7 @@ embed_text(
   texts,
   model = .embedModel(),
   backend = .llmBackend(),
+  batch = 64L,
   quiet = FALSE
 )
 }
@@ -17,6 +18,9 @@ embed_text(
 \item{model}{Embedding model name (default \code{nomic-embed-text}).}
 
 \item{backend}{\code{"ollama"}, \code{"none"}, or \code{"auto"} (default from options).}
+
+\item{batch}{Texts to embed per request (batched via \verb{/api/embed}); falls
+back to per-item embedding if the batch endpoint is unavailable.}
 
 \item{quiet}{Suppress the progress bar.}
 }

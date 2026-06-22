@@ -59,17 +59,33 @@ embeddings_available <- function() {
   }, error = function(e) NULL)
 }
 
+# Embed a batch of strings in a single /api/embed call (input = JSON list).
+# Returns an n x dim matrix, or NULL if the batch endpoint is unavailable so the
+# caller can fall back to per-item embedding.
+.ollamaEmbedBatch <- function(host, model, texts, timeout = 300) {
+  texts <- ifelse(nzchar(texts), texts, " ")
+  tryCatch({
+    r <- httr2::req_perform(httr2::req_timeout(httr2::req_body_json(
+      httr2::request(paste0(host, "/api/embed")),
+      list(model = model, input = as.list(texts))), timeout))
+    emb <- httr2::resp_body_json(r)$embeddings
+    if (length(emb) == length(texts)) do.call(rbind, lapply(emb, as.numeric)) else NULL
+  }, error = function(e) NULL)
+}
+
 #' Embed text with the local embedding model
 #'
 #' @param texts Character vector of documents to embed.
 #' @param model Embedding model name (default `nomic-embed-text`).
 #' @param backend `"ollama"`, `"none"`, or `"auto"` (default from options).
+#' @param batch Texts to embed per request (batched via `/api/embed`); falls
+#'   back to per-item embedding if the batch endpoint is unavailable.
 #' @param quiet Suppress the progress bar.
 #' @return A numeric matrix with one row per input text (embedding dimension
 #'   columns). Rows that fail to embed are `NA`.
 #' @export
 embed_text <- function(texts, model = .embedModel(), backend = .llmBackend(),
-                       quiet = FALSE) {
+                       batch = 64L, quiet = FALSE) {
   texts <- as.character(texts)
   if (identical(backend, "none")) {
     cli::cli_abort(c("No embedding backend is configured.",
@@ -80,12 +96,22 @@ embed_text <- function(texts, model = .embedModel(), backend = .llmBackend(),
   }
   host <- .ollamaHost()
   n <- length(texts)
-  if (!quiet) cli::cli_progress_bar("Embedding", total = n)
+  if (n == 0L) return(matrix(numeric(0), 0L, 0L))
+  groups <- split(seq_len(n), ceiling(seq_len(n) / max(1L, batch)))
+  if (!quiet) cli::cli_progress_bar("Embedding", total = length(groups))
   vecs <- vector("list", n)
   dim <- NA_integer_
-  for (i in seq_len(n)) {
-    v <- .ollamaEmbedOne(host, model, texts[[i]])
-    if (!is.null(v)) { vecs[[i]] <- v; if (is.na(dim)) dim <- length(v) }
+  for (g in groups) {
+    mb <- .ollamaEmbedBatch(host, model, texts[g])
+    if (is.null(mb)) {                      # batch endpoint unavailable: per item
+      for (i in g) {
+        v <- .ollamaEmbedOne(host, model, texts[[i]])
+        if (!is.null(v)) { vecs[[i]] <- v; if (is.na(dim)) dim <- length(v) }
+      }
+    } else {
+      if (is.na(dim)) dim <- ncol(mb)
+      for (j in seq_along(g)) vecs[[g[j]]] <- mb[j, ]
+    }
     if (!quiet) cli::cli_progress_update()
   }
   if (!quiet) cli::cli_progress_done()
