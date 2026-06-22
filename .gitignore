@@ -19,3 +19,4 @@ src/*.dll
 inst/doc/
 vignettes/*.html
 vignettes/articles/*.html
+docs

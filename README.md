@@ -1,5 +1,10 @@
 # nlmixr2libingest
 
+<!-- badges: start -->
+[![R-CMD-check](https://github.com/billdenney/nlmixr2libingest/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/billdenney/nlmixr2libingest/actions/workflows/R-CMD-check.yaml)
+[![Codecov test coverage](https://codecov.io/gh/billdenney/nlmixr2libingest/graph/badge.svg)](https://app.codecov.io/gh/billdenney/nlmixr2libingest)
+<!-- badges: end -->
+
 Token-efficient, quality-preserving tooling for ingesting published
 population-PK/PD models into [nlmixr2lib](https://github.com/nlmixr2/nlmixr2lib)
 at scale.
