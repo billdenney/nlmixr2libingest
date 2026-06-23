@@ -1,0 +1,196 @@
+# DRAFT auto-answer policy table for the nlmixr2lib-ingestion sidecar responder.
+#
+# Source: mined from /home/bill/gitlab/nlmixr2lib_ingestion/.claude_task_runner/sidecar/
+#   1386 request files, 1341 responses, 1760 individual question records (1724 answered),
+#   45 unanswered requests, 2 malformed-JSON requests.
+#
+# GOVERNING PRINCIPLE (read before enabling any auto-answer):
+#   A sidecar exists because the dispatched agent already decided it could NOT proceed
+#   autonomously. An automated responder may therefore substitute an answer ONLY when the
+#   canonical answer is a SELF-CONTAINED DIRECTIVE the agent can act on with no operator
+#   input (e.g. "skip and queue cited primaries", "verify the already-merged branch and
+#   exit"). Any answer whose realisation requires the operator to physically supply a file,
+#   pick a scientific encoding, name a new data-model column, or choose between competing
+#   model structures is NOT auto-answerable and MUST escalate, even if historically
+#   "consistent", because the consistency was the operator doing work the agent cannot do.
+#
+# A WRONG AUTO-ANSWER POISONS AN EXTRACTION. When in doubt -> escalate.
+#
+# match semantics: a policy fires only if (a) ANY match_keywords token is found
+#   (case-insensitive) in prompt + summary + trigger + option-labels, AND
+#   (b) match_paper_type (if present) is satisfied, AND
+#   (c) the offered options actually contain an option whose label matches answer_text
+#   (the responder must resolve answer_text -> the option `value` at runtime, since the
+#   A/B/C letter is positional and NOT stable across tasks; never hardcode the letter).
+# If no policy matches, OR multiple conflicting policies match, escalate.
+
+policies:
+
+  - id: review_or_methodology_paper_skip
+    match_keywords:
+      - "systematic review"
+      - "review paper"
+      - "review article"
+      - "meta-analysis"
+      - "methodology paper"
+      - "methods paper"
+      - "not an original model"
+      - "no original model"
+      - "cited primary"
+      - "skip and queue"
+      - "skip + queue"
+    match_paper_type: review_or_methodology
+    answer_value: null   # resolve to the option whose label == answer_text at runtime
+    answer_text: "Skip this task (and queue any cited primary popPK/PD papers if they contain real models)"
+    confidence: high
+    rationale: >
+      Most consistent type in the dataset: 219/255 non-blank answers (86%) chose a
+      skip-family option for review/methodology/meta-analysis papers. The action is
+      self-contained (close the task, optionally queue cited primaries) and matches the
+      extract-literature-model skill's own out-of-scope rule, so the agent can execute it
+      without operator input. ESCALATE the rare case where the "review" actually embeds a
+      novel fitted popPK model (option offers "extract anyway") -- that is a judgement call.
+
+  - id: already_merged_verify_and_exit
+    match_keywords:
+      - "already merged"
+      - "already-merged"
+      - "worktree-resumption"
+      - "already in origin/main"
+      - "merged into origin/main"
+      - "merged via pr"
+      - "task_already_completed"
+      - "deliverable already present"
+      - "duplicate-of-merged"
+    answer_value: null
+    answer_text: "Verify the merged/pushed content and exit cleanly without re-extracting"
+    confidence: medium
+    rationale: >
+      The triggering fact (the task's deliverable is already on origin/main) is objectively
+      VERIFIABLE by the agent via git, which is why this is auto-answerable at all. Of 43
+      non-blank answers, 27 (63%) chose verify-and-exit. Confidence is only medium because a
+      real tail of cases asked the agent to ADD a companion model (e.g. a separate PD file)
+      that was not in the merged commit. RULE: auto-answer verify-and-exit ONLY when the
+      agent confirms the branch/commit truly contains the full requested deliverable; if the
+      paper has an un-extracted second model/endpoint, ESCALATE instead.
+
+  - id: worktree_working_dir_null
+    match_keywords:
+      - "working_dir: null"
+      - "working_dir is null"
+      - "pre-dispatch hook did not set up the worktree"
+      - "not a git repo"
+      - "not an nlmixr2lib git repo"
+    answer_value: null
+    answer_text: "Operator fills in working_dir and lets the pre-dispatch hook create the worktree"
+    confidence: medium
+    rationale: >
+      A deterministic infrastructure misconfiguration (the queue YAML lacks working_dir),
+      not a scientific decision. The operator answer was unanimous across the observed cases
+      (fill in working_dir, re-dispatch). Auto-answering merely records the canonical
+      remediation; it does NOT let the agent proceed (the operator still edits the YAML), so
+      it is low-risk. Medium rather than high only because the sample is small.
+
+escalate_types:
+
+  # ---- Always send these to a human. Either inconsistent, or the "consistent" answer
+  #      requires operator action / scientific judgement the responder cannot supply. ----
+
+  - id: pdf_not_on_disk
+    why_escalate: >
+      Largest type (538 records) but NOT auto-answerable. The dominant answers
+      ("operator acquires/drops the PDF and re-dispatches", 49%) and the runner-up ("skip",
+      25%) BOTH require the operator: only a human can decide whether the paper is worth
+      chasing and physically place the PDF. Auto-skipping would silently drop extractable
+      papers; auto-"acquire" cannot be executed by the agent. The 49/25 split is itself not
+      decisive. MUST ESCALATE.
+    example_prompt: "Lead PDF not on disk; open-access acquisition ladder exhausted. How should this task proceed?"
+
+  - id: new_canonical_covariate
+    why_escalate: >
+      174 records. Even though "approve as proposed" is the plurality (78/166), there is a
+      large free-text/blank tail (36 blank) and dozens of bespoke counter-proposals where
+      the operator renamed the canonical, reused an existing column, or restructured the
+      covariate (e.g. snp_*/conmed_*/assay_* naming). Adding or naming a canonical data-model
+      column is a permanent schema decision affecting every future model -- exactly the kind
+      of judgement the sidecar exists to surface. MUST ESCALATE.
+    example_prompt: "Approve adding a new canonical covariate column CRCL_BASE for per-subject baseline creatinine clearance?"
+
+  - id: paper_identity_mismatch
+    why_escalate: >
+      143 records, badly scattered: SKIP 25%, approve-corrected-metadata 17%, confirm 9%,
+      proceed 8%, plus a long tail of bespoke drug/file renames. Resolving a drug-field or
+      citation mismatch needs a human to confirm the true paper identity; a wrong guess
+      mislabels the extraction. MUST ESCALATE. (A future narrow exception: pure
+      task-generator parser artefacts where the operator just "acknowledges the bug" -- but
+      these are not separable by keyword reliably enough to automate yet.)
+
+  - id: value_abstract_vs_table
+    why_escalate: >
+      69 records, no dominant action (approve-proposed 27%, skip 19%, plus many bespoke
+      "use value X / document deviation" answers). Choosing which numeric estimate to encode
+      when the abstract and tables disagree is a core scientific-fidelity judgement. A wrong
+      number is a silent data-poisoning bug. MUST ESCALATE.
+
+  - id: initial_vs_final_estimate
+    why_escalate: >
+      Only 3 records (all chose the published final-table estimate). Too few to generalise,
+      and the choice depends on what the specific run record/supplement contains. ESCALATE
+      until more data accumulates -- though "use the published FINAL parameter estimates"
+      is the leading candidate for a future high-confidence policy.
+
+  - id: unit_convention
+    why_escalate: >
+      6 records, no consistent pattern (skip, multiplicative encoding, proportional+additive,
+      binary recode). Unit handling (g/L vs g/dL, raw vs BSA-normalised, omega^2 vs %CV) is
+      model-specific and error-prone; getting it wrong rescales the whole model. MUST ESCALATE.
+
+  - id: covariate_encoding_naming
+    why_escalate: >
+      9 records, highly inconsistent (full-fidelity vs drop-covariate vs fixed-anchor vs
+      drug-specific canonicals). How to encode an ambiguous covariate is per-paper judgement.
+      MUST ESCALATE.
+
+  - id: multiple_candidate_models
+    why_escalate: >
+      7 records, split between "extract all as separate files" and "extract the single
+      recommended model". Whether to split a paper into N model files is a scope decision
+      that depends on the paper's structure. MUST ESCALATE.
+
+  - id: infeasible_for_nlmixr
+    why_escalate: >
+      59 records. Although SKIP is the plurality (49%), there is a substantial tail where the
+      operator chose to extract a tractable sub-model (PD-only module, per-study files, a
+      reduced encoding) instead of skipping. Deciding whether a PBPK/QSP/PDE model has an
+      extractable nlmixr2-expressible core is a genuine modelling judgement. MUST ESCALATE.
+
+  - id: missing_parameter_or_supplement
+    why_escalate: >
+      40 records. SKIP is the plurality (56%) but the alternatives ("operator provides the
+      supplement / control stream", "approximate with documented placeholder", "correct the
+      metadata") all need operator input or scientific approximation judgement. MUST ESCALATE.
+
+  - id: skill_not_registered_proceed_confirmation
+    why_escalate: >
+      ~45 records where the agent cannot find /extract-literature-model registered. The
+      consistent answer ("operator installs/registers the skill, then re-dispatches") is an
+      OPERATOR ACTION, not an answer the agent can act on to proceed. Auto-acknowledging would
+      not unblock anything and could mask a real harness regression. MUST ESCALATE (and treat
+      as a harness/infra alert, not a per-task decision).
+
+  - id: pknca_mismatch
+    why_escalate: >
+      9 records, inconsistent (verify-and-exit, skip-NCA-only, acknowledge-generator-bug,
+      operator-drops-different-PDF). A PKNCA/NCA validation mismatch can indicate either a
+      benign tooling artefact or a real extraction error; distinguishing them needs a human.
+      MUST ESCALATE.
+
+  - id: model_structure_scope_and_encoding   # the bulk of "other_uncategorized" (300 answered)
+    why_escalate: >
+      Catch-all for the largest judgement-dependent cluster: how to encode a clearance/PD
+      relationship, whether to split into separate model files, which IIV/residual-error
+      structure to use, whether to include placebo/dropout sub-models, how to handle
+      allometry references, depends_on ordering, etc. These are precisely the scientific and
+      structural decisions the sidecar protocol is designed to route to a human. Answers were
+      bespoke per task. MUST ESCALATE -- this is the default bucket; anything not matched by a
+      policy above falls here.
