@@ -103,8 +103,13 @@
                    "rcmdcheck not installed; R CMD check skipped",
                    "install.packages('rcmdcheck') for full-tier checks"))
   }
+  # --no-build-vignettes: the vignette is render-checked separately in .vRender,
+  # and a full vignette build during check can hit environment-specific C-level
+  # segfaults (e.g. the known nlmixr2lib CarlssonPetri case) unrelated to the
+  # model under test. Checking the package without rebuilding vignettes mirrors
+  # how the production extract-literature-model skill runs devtools::check().
   res <- tryCatch(
-    rcmdcheck::rcmdcheck(pkg, args = c("--no-manual", "--as-cran"),
+    rcmdcheck::rcmdcheck(pkg, args = c("--no-manual", "--no-build-vignettes"),
                          error_on = "never", quiet = TRUE),
     error = function(e) e)
   if (inherits(res, "condition")) {
