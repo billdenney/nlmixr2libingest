@@ -139,25 +139,93 @@ question on overrun rather than hard-killing.
 
 ## 4. Results
 
-*To be completed as the pipeline is built and benchmarked.* Planned measurements,
-reported from the runner's per-run token/cost records:
+Dollar figures use the runner's recorded blended rate (~$1.3/Mtok-total; cost is
+dominated by cache-read). Token figures for re-runs were recovered from the
+agents' own per-message usage transcripts.
 
-- Token economics: cache_read and output per run, before vs after each lever, on
-  a fixed paper set (not anecdotes).
-- Register lookup: context tokens avoided per covariate/parameter resolution.
-- Classifier: held-out precision/recall for the fittable decision; archetype
-  top-3 hit rate.
-- Archetype taxonomy: cluster inventory and frequencies across the 981 models,
-  including the size and contents of the *other* bucket.
+### 4.1 Cost is cache-read × turns
+
+Two original library extractions, from the runner's complete RunRecords:
+vedolizumab 3.25M tokens (**2.86M cache-read**, 23k output), $4.27, ~20 turns;
+the van Dijkman decline 1.79M tokens (1.54M cache-read), $2.67, 5 attempts.
+**~96% of tokens — and of cost — are cache reads.** Empirically, run cost ≈ rate ×
+Σ_turns(cached context), so the two control variables are *per-turn context size*
+and *number of turns*.
+
+### 4.2 Blind re-extraction accuracy
+
+Re-extracting four already-curated papers from source alone, then cross-checking
+against the shipped models and the papers: (i) a 1-cmt linear mAb — faithful,
+11/11 values source-traced, and it actually **corrected a unit error in the
+shipped model** (the paper reports ng/mL; the curated model used µg/mL, 1000× off
+in simulation); (ii) a 2-cmt parallel-linear+Michaelis-Menten model with **13
+covariates** — full structural and numeric match, 31/31 traced (incl. the
+supplement's Table S4); (iii) a **PK-free algebraic exposure-response PD model** —
+correct structure, but one real error (it used the residual *variance* 7.09 where
+the *SD* 2.66 belongs); (iv) a meta-modelling catalogue of 11 cited models —
+**correctly declined to fabricate**, matching the operator's original deselection.
+Two value disagreements, one in each direction, both resolved by reading the
+paper. The judgement-versus-mechanism boundary is real: the model structure and
+most values extract reliably; unit conventions and variance-vs-SD encodings are
+where errors hide.
+
+### 4.3 A firewall limitation
+
+The programmatic source-trace flags ini() values with no supporting number in the
+paper, but it verifies *presence*, not *slot*: the erroneous residual `7.09` read
+as "found" because that number *is* in the paper — as the variance. Catching a
+right-number-wrong-role error still requires reading the labelled column. A
+role-aware or LLM-cross-checked variant is future work.
+
+### 4.4 The register-lookup lever (controlled A/B)
+
+Same six-covariate task, two ways, with full transcript telemetry: reading
+covariate-columns.md (~136k tokens) into context cost **17.6M tokens / $22.84**
+(peak per-turn context 532k); resolving the same six via `lookup_canonical` cost
+**0.47M tokens / $0.62** (peak context 44k) — **~37× cheaper, 12× smaller peak
+context**, for identical answers. The lookup is a strict win *when an agent would
+otherwise load the register.*
+
+### 4.5 What actually dominates cost
+
+Verbose, general-purpose re-extractions cost **5–14× the originals** ($41 vs $4.27
+for the hard case) — but **not because of the register** (lookup-capable agents
+never loaded it; their peak context stayed below the file size). The driver was
+**turn count**: 126–267 model turns versus the tuned runner's ~20. Because cost ≈
+context × turns, a ~10× turn inflation produced a ~10× cost inflation. The single
+correctly-declined case (23 turns) was the only one that matched the original's
+cost.
 
 ## 5. Discussion
 
-Open questions and limitations to develop: where deterministic structure
-extraction stops and judgement begins; how much an archetype prior helps vs
-anchors; the failure modes of small-model distillation and why verification
-remains mandatory; the portability cost of depending on local infrastructure; and
-the boundary discipline between an ingestion package and the validated library it
-feeds.
+The levers in this package are aimed correctly — at *per-turn context* (register
+lookup, log filtering, a lean lazily-loaded skill) — and they save real money when
+triggered (lookup: ~37× on an isolated task). But the **dominant** cost driver in
+practice is the **number of turns**, which is a property of the dispatching
+agent's discipline more than of the tooling. The practical conclusion is that the
+biggest savings come from a tuned, low-turn dispatch (as the production runner
+already is), with the input-side levers compounding on top.
+
+Several further input-side pre-processing steps follow directly from the cost
+model and are candidates for the low-turn path: a cheap local-LLM pass that reads
+the paper, identifies its covariates, and emits a *focused, model-specific
+covariate report* (paper name → canonical name/units/reference) so the agent
+neither loads the register nor spends turns looking covariates up; a *single
+code-based validation step* that runs parse, conventions, source-trace,
+registry-build, check, and vignette-render and returns one terse "Success" or a
+short list of file-and-line fixes, replacing the verbose logs that otherwise bloat
+every subsequent turn; and a *policy-driven sidecar auto-responder* that answers
+recurring stop-and-ask questions from a vetted policy table on the next tick, so a
+run continues on a warm cache instead of paying a cold retry. Each keeps the
+expensive judgement with the agent while moving deterministic or pre-decidable
+work off the per-turn critical path.
+
+Open limitations remain: the source-trace presence-vs-slot gap above; the
+portability cost of a local-LLM dependency (mitigated by graceful degradation);
+the reliance on small local models for distillation, which the source-trace
+firewall is designed to catch; and the boundary discipline between this ingestion
+package and the validated library it feeds, which must stay one-directional
+(consume, never reimplement validation).
 
 ## 6. Conclusion
 
