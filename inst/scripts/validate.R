@@ -4,12 +4,15 @@
 # logs. Exit status: 0 = success, 1 = issues found, 2 = usage error.
 #
 # Usage:
-#   Rscript validate.R <model> [paper] [--full] [--pkg DIR] [--vignette FILE]
+#   Rscript validate.R <model> [paper] [--model|--full] [--pkg DIR] [--vignette FILE]
 #     <model>        nlmixr2lib model name, or path to a model .R file
 #     [paper]        paper text file (enables the source-trace stage)
-#     --full         also run R CMD check (needs --pkg) and vignette render
-#     --pkg DIR      package dir for the full-tier check (default: cwd)
-#     --vignette F   vignette .Rmd to render-check in the full tier
+#     --model        the per-iteration combined gate: parse + conventions +
+#                    source-trace + load_all(--pkg) + vignette render, in ONE
+#                    session (no whole-package check). Use this in the fix loop.
+#     --full         the pre-commit gate: also run whole-package R CMD check
+#     --pkg DIR      package dir (load_all-ed for --model, R-CMD-checked for --full; default cwd)
+#     --vignette F   vignette .Rmd to render (--model / --full)
 
 args <- commandArgs(trailingOnly = TRUE)
 flag <- function(name) name %in% args
@@ -22,7 +25,7 @@ pos <- args[!grepl("^--", args)]
 pos <- setdiff(pos, c(optval("--pkg"), optval("--vignette")))
 
 if (!length(pos) || !nzchar(pos[[1L]])) {
-  cat("usage: Rscript validate.R <model> [paper] [--full] [--pkg DIR] [--vignette FILE]\n")
+  cat("usage: Rscript validate.R <model> [paper] [--model|--full] [--pkg DIR] [--vignette FILE]\n")
   quit(status = 2)
 }
 if (!requireNamespace("nlmixr2libingest", quietly = TRUE)) {
@@ -39,12 +42,12 @@ if (file.exists(model)) {
   if (length(fns)) model <- fns[[1L]]
 }
 paper    <- if (length(pos) >= 2L && nzchar(pos[[2L]])) pos[[2L]] else NULL
-level    <- if (flag("--full")) "full" else "fast"
+level    <- if (flag("--full")) "full" else if (flag("--model")) "model" else "fast"
 pkg      <- optval("--pkg", ".")
 vignette <- optval("--vignette")
 
 res <- nlmixr2libingest::validate_model(
   model, paper = paper, level = level,
-  pkg = if (level == "full") pkg else NULL, vignette = vignette)
+  pkg = if (level %in% c("full", "model")) pkg else NULL, vignette = vignette)
 print(res)
 quit(status = if (identical(res$status, "success")) 0L else 1L)

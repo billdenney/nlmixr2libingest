@@ -7,7 +7,7 @@
 validate_model(
   model,
   paper = NULL,
-  level = c("fast", "full"),
+  level = c("fast", "full", "model"),
   pkg = NULL,
   vignette = NULL,
   tol = 0.05
@@ -18,10 +18,13 @@ validate_model(
 
 \item{paper}{Optional paper text or path; enables the source-trace stage.}
 
-\item{level}{\code{"fast"} (parse + conventions + source-trace) or \code{"full"}
-(adds R CMD check and vignette render).}
+\item{level}{\code{"fast"} (parse + conventions + source-trace), \code{"model"} (adds a
+one-session \code{load_all} of \code{pkg} + the model's vignette render -- the
+per-iteration combined gate, \emph{no} whole-package check), or \code{"full"} (adds a
+whole-package R CMD check + render; the pre-commit gate).}
 
-\item{pkg}{Package directory for the full-tier R CMD check.}
+\item{pkg}{Package directory: \code{load_all}-ed for the \code{model} tier, R-CMD-checked
+for the \code{full} tier.}
 
 \item{vignette}{Optional path to the model's validation vignette to render.}
 
