@@ -218,12 +218,32 @@ runs were dropped as unreliable — one to an output-evidence-gate misconfigurat
 declared a deliverable file), and one to a corrupted usage capture ($9.74 billed
 against an implausible 102 output tokens).*
 
-| paper | skill | n | mean cost | mean cache-read | mean wall-clock |
-|---|---|---|---|---|---|
-| 1-cmt mAb (easy) | production | 3 | $2.86 | 2.32M | 690 s |
-| 1-cmt mAb (easy) | **lean** | 2 | **$1.77** | **1.32M** | 930 s |
-| 2-cmt parallel-linear + MM, 13 cov (hard) | production | 2 | $4.83 | 5.09M | 779 s |
-| 2-cmt parallel-linear + MM, 13 cov (hard) | **lean** | 3 | $5.05 | 6.27M | 2125 s |
+Every individual extraction run (the `$0` stop-sequence throttle-aborts that
+precede some runs are omitted; `*` = excluded from the summary):
+
+| paper | skill | rep | output | cache-read | total tok | cost | wall-clock |
+|---|---|---|---|---|---|---|---|
+| easy (1-cmt mAb) | production | 1 | 22,704 | 2,477,773 | 2,632,714 | $2.63 | 568 s |
+| easy (1-cmt mAb) | production | 2 | 34,137 | 1,536,424 | 1,696,937 | $2.41 | 486 s |
+| easy (1-cmt mAb) | production | 3 | 24,313 | 2,932,387 | 3,188,931 | $3.53 | 1015 s |
+| easy (1-cmt mAb) | lean | 1\* | 27,126 | 4,714,280 | 4,888,691 | $3.96 | 1667 s |
+| easy (1-cmt mAb) | lean | 2 | 22,578 | 1,388,453 | 1,505,667 | $1.85 | 745 s |
+| easy (1-cmt mAb) | lean | 3 | 19,444 | 1,260,787 | 1,369,686 | $1.68 | 1116 s |
+| hard (2-cmt+MM, 13 cov) | production | 1 | 38,898 | 5,675,022 | 6,018,958 | $5.72 | 863 s |
+| hard (2-cmt+MM, 13 cov) | production | 2\* | 102 | 198,007 | 198,434 | $9.74 | 1439 s |
+| hard (2-cmt+MM, 13 cov) | production | 3 | 29,151 | 4,506,228 | 4,689,133 | $3.94 | 695 s |
+| hard (2-cmt+MM, 13 cov) | lean | 1 | 35,507 | 4,869,027 | 5,033,247 | $4.13 | 2179 s |
+| hard (2-cmt+MM, 13 cov) | lean | 2 | 34,360 | 6,404,502 | 6,570,678 | $4.89 | 1628 s |
+| hard (2-cmt+MM, 13 cov) | lean | 3 | 45,083 | 7,522,658 | 7,766,024 | $6.13 | 2569 s |
+
+`*` easy/lean/1 is the output-gate-failed task; it ran a *second* complete
+extraction too (run 4: $1.66 / 1.23M total / 1149 s) before being killed — both
+excluded. hard/production/2 billed $9.74 against 102 output tokens (inconsistent
+usage capture) — excluded.
+
+Means over the included runs (cost | cache-read | wall-clock): easy production
+$2.86 | 2.32M | 690 s vs lean **$1.77 | 1.32M** | 930 s; hard production $4.83 |
+5.09M | 779 s vs lean $5.05 | 6.27M | 2125 s.
 
 The headline is that **the token-minimising skill's benefit is
 complexity-dependent, not universal.** On the easy model the lean variant was
