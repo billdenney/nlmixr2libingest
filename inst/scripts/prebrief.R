@@ -1,31 +1,45 @@
 #!/usr/bin/env Rscript
-# prebrief.R -- CLI: a model-specific naming pre-brief in compact markdown, so
-# the skill resolves a paper's covariates/parameters/compartments to canonical
-# names ONCE instead of loading the register or looking terms up turn-by-turn.
+# prebrief.R -- batch-resolve a list of paper terms to canonical nlmixr2lib
+# names in ONE call (one index load, one turn), instead of a lookup-per-term.
+#
+# The agent identifies the covariates (and any non-obvious parameter /
+# compartment names) while reading the paper, then resolves them all at once.
+# This avoids reading the ~284k-token covariate register AND avoids a separate
+# lookup turn per name -- the saving grows with the covariate count.
 #
 # Usage:
-#   Rscript prebrief.R <paper> [kinds]
-#     <paper>   paper text file (the trimmed paper)
-#     [kinds]   comma-separated: covariate,parameter,compartment
-#               (default: covariate)
+#   Rscript prebrief.R <kind> <term> [<term> ...]
+#     <kind>  covariate | parameter | compartment
+#     <term>  the paper's name/phrase for each item (quote multi-word phrases)
 #
-# Uses the local LLM to widen candidate recall when one is configured; with no
-# LLM it falls back to a deterministic register scan. Either way the result is a
-# PRIOR -- the agent still source-traces every value against the paper.
+# Prints a compact "term -> CANONICAL [units, scope]" brief; an unresolved term
+# is flagged UNMATCHED (a possible new canonical -> stop-and-ask). PRIOR ONLY:
+# source-trace every value against the paper.
 
 args <- commandArgs(trailingOnly = TRUE)
-if (!length(args) || !nzchar(args[[1L]])) {
-  cat("usage: Rscript prebrief.R <paper> [kinds]\n")
-  quit(status = 2)
+if (length(args) < 2L || !nzchar(args[[1L]])) {
+  cat("usage: Rscript prebrief.R <kind> <term> [<term> ...]\n")
+  quit(status = 2L)
 }
 if (!requireNamespace("nlmixr2libingest", quietly = TRUE)) {
   cat("error: install the nlmixr2libingest package first.\n")
-  quit(status = 2)
+  quit(status = 2L)
 }
-paper <- args[[1L]]
-kinds <- if (length(args) >= 2L && nzchar(args[[2L]])) {
-  trimws(strsplit(args[[2L]], ",", fixed = TRUE)[[1L]])
-} else "covariate"
+kind  <- args[[1L]]
+terms <- args[-1L]
 
-res <- nlmixr2libingest::naming_prebrief(paper, kinds = kinds)
-nlmixr2libingest::render_prebrief(res)
+cat(sprintf("# Naming pre-brief: %d %s term(s) (prior only -- source-trace every value)\n",
+            length(terms), kind))
+for (t in terms) {
+  r <- tryCatch(nlmixr2libingest::lookup_canonical(t, kind = kind, top_k = 1L),
+                error = function(e) NULL)
+  if (is.null(r) || !nrow(r)) {
+    cat(sprintf("- %s -> UNMATCHED (possible new canonical -> stop-and-ask)\n", t))
+    next
+  }
+  tag <- paste(stats::na.omit(c(r$units[1L], r$scope[1L])), collapse = ", ")
+  tag <- if (nzchar(tag)) paste0("  [", substr(tag, 1L, 90L), "]") else ""
+  arrow <- if (tolower(t) == tolower(r$name[1L])) r$name[1L]
+           else sprintf("%s -> %s", t, r$name[1L])
+  cat(sprintf("- %s%s\n", arrow, tag))
+}
