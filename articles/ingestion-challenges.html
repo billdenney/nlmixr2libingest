@@ -242,30 +242,385 @@ hard-killing.</p>
 <div class="section level2">
 <h2 id="results">4. Results<a class="anchor" aria-label="anchor" href="#results"></a>
 </h2>
-<p><em>To be completed as the pipeline is built and benchmarked.</em>
-Planned measurements, reported from the runner’s per-run token/cost
-records:</p>
-<ul>
-<li>Token economics: cache_read and output per run, before vs after each
-lever, on a fixed paper set (not anecdotes).</li>
-<li>Register lookup: context tokens avoided per covariate/parameter
-resolution.</li>
-<li>Classifier: held-out precision/recall for the fittable decision;
-archetype top-3 hit rate.</li>
-<li>Archetype taxonomy: cluster inventory and frequencies across the 981
-models, including the size and contents of the <em>other</em>
-bucket.</li>
-</ul>
+<p>Dollar figures use the runner’s recorded blended rate
+(~$1.3/Mtok-total; cost is dominated by cache-read). Token figures for
+re-runs were recovered from the agents’ own per-message usage
+transcripts.</p>
+<div class="section level3">
+<h3 id="cost-is-cache-read-turns">4.1 Cost is cache-read × turns<a class="anchor" aria-label="anchor" href="#cost-is-cache-read-turns"></a>
+</h3>
+<p>Two original library extractions, from the runner’s complete
+RunRecords: vedolizumab 3.25M tokens (<strong>2.86M cache-read</strong>,
+23k output), $4.27, ~20 turns; the van Dijkman decline 1.79M tokens
+(1.54M cache-read), $2.67, 5 attempts. <strong>~96% of tokens — and of
+cost — are cache reads.</strong> Empirically, run cost ≈ rate ×
+Σ_turns(cached context), so the two control variables are <em>per-turn
+context size</em> and <em>number of turns</em>.</p>
+</div>
+<div class="section level3">
+<h3 id="blind-re-extraction-accuracy">4.2 Blind re-extraction accuracy<a class="anchor" aria-label="anchor" href="#blind-re-extraction-accuracy"></a>
+</h3>
+<p>Re-extracting four already-curated papers from source alone, then
+cross-checking against the shipped models and the papers: (i) a 1-cmt
+linear mAb — faithful, 11/11 values source-traced, and it actually
+<strong>corrected a unit error in the shipped model</strong> (the paper
+reports ng/mL; the curated model used µg/mL, 1000× off in simulation);
+(ii) a 2-cmt parallel-linear+Michaelis-Menten model with <strong>13
+covariates</strong> — full structural and numeric match, 31/31 traced
+(incl. the supplement’s Table S4); (iii) a <strong>PK-free algebraic
+exposure-response PD model</strong> — correct structure, but one real
+error (it used the residual <em>variance</em> 7.09 where the <em>SD</em>
+2.66 belongs); (iv) a meta-modelling catalogue of 11 cited models —
+<strong>correctly declined to fabricate</strong>, matching the
+operator’s original deselection. Two value disagreements, one in each
+direction, both resolved by reading the paper. The
+judgement-versus-mechanism boundary is real: the model structure and
+most values extract reliably; unit conventions and variance-vs-SD
+encodings are where errors hide.</p>
+</div>
+<div class="section level3">
+<h3 id="a-firewall-limitation">4.3 A firewall limitation<a class="anchor" aria-label="anchor" href="#a-firewall-limitation"></a>
+</h3>
+<p>The programmatic source-trace flags ini() values with no supporting
+number in the paper, but it verifies <em>presence</em>, not
+<em>slot</em>: the erroneous residual <code>7.09</code> read as “found”
+because that number <em>is</em> in the paper — as the variance. Catching
+a right-number-wrong-role error still requires reading the labelled
+column. A role-aware or LLM-cross-checked variant is future work.</p>
+</div>
+<div class="section level3">
+<h3 id="the-register-lookup-lever-controlled-ab">4.4 The register-lookup lever (controlled A/B)<a class="anchor" aria-label="anchor" href="#the-register-lookup-lever-controlled-ab"></a>
+</h3>
+<p>Same six-covariate task, two ways, with full transcript telemetry:
+reading covariate-columns.md (~136k tokens) into context cost
+<strong>17.6M tokens / $22.84</strong> (peak per-turn context 532k);
+resolving the same six via <code>lookup_canonical</code> cost
+<strong>0.47M tokens / $0.62</strong> (peak context 44k) — <strong>~37×
+cheaper, 12× smaller peak context</strong>, for identical answers. The
+lookup is a strict win <em>when an agent would otherwise load the
+register.</em></p>
+</div>
+<div class="section level3">
+<h3 id="what-actually-dominates-cost">4.5 What actually dominates cost<a class="anchor" aria-label="anchor" href="#what-actually-dominates-cost"></a>
+</h3>
+<p>Verbose, general-purpose re-extractions cost <strong>5–14× the
+originals</strong> ($41 vs $4.27 for the hard case) — but <strong>not
+because of the register</strong> (lookup-capable agents never loaded it;
+their peak context stayed below the file size). The driver was
+<strong>turn count</strong>: 126–267 model turns versus the tuned
+runner’s ~20. Because cost ≈ context × turns, a ~10× turn inflation
+produced a ~10× cost inflation. The single correctly-declined case (23
+turns) was the only one that matched the original’s cost.</p>
+</div>
+<div class="section level3">
+<h3 id="supervised-ab-on-the-live-runner-the-levers-in-a-real-extraction">4.6 Supervised A/B on the live runner: the levers in a real
+extraction<a class="anchor" aria-label="anchor" href="#supervised-ab-on-the-live-runner-the-levers-in-a-real-extraction"></a>
+</h3>
+<p>Section 4.4 measured one lever in isolation; here the
+<em>combined</em> token-minimising skill is measured end-to-end against
+the production skill on the real dispatch runner, with full RunRecord
+telemetry (the accurate vehicle the earlier ad-hoc probes lacked). Two
+skills were compared: the production
+<code>extract-literature-model</code> and a <code>-lean</code> variant
+that (i) resolves every canonical covariate/parameter name in one
+batched pre-brief instead of a lookup per name, and (ii) replaces the
+separate vignette-render, convention-lint, and <code>R CMD check</code>
+gates with a single <code>validate_model(level = "full")</code> call.
+Everything else was held fixed — same two papers, same model
+(<code>claude-opus-4-7</code>), same effort, one task at a time on a
+single account, byte-identical prompts except the skill name — and each
+cell was run in triplicate.</p>
+<p><em>Aside (baseline provenance, for a later detailed write-up): the
+production skill is <code>extract-literature-model</code> at nlmixr2lib
+commit <code>dc10fec8</code> (<code>origin/main</code> at experiment
+time); the lean variant was committed at <code>2226ba8f</code>. All
+per-run figures are re-derived from the per-attempt <code>result</code>
+events (the authoritative totals <code>claude</code> reports), not the
+runner’s summary RunRecord, because one attempt’s RunRecord proved
+unreliable (see below). One run is excluded: easy/lean/1, a complete
+extraction the output-evidence gate wrongly flagged “no output” because
+the task neither committed nor declared a deliverable file — a
+harness-config error, since corrected, not a model failure.</em></p>
+<p>A second run, hard/production/2, first looked anomalous (its
+RunRecord showed 102 output tokens) but is in fact a <strong>real,
+expensive run</strong> and is included: its attempt held three
+<code>claude</code> invocations (an 81-turn extraction plus two
+resumes), and the RunRecord captured only the last resume’s per-call
+usage while the cost ($9.74) was cumulative; from the
+<code>result</code> events it is a render-loop extraction of 38k output
+/ 11.9M cache-read.</p>
+<p>Every individual extraction run (the <code>$0</code> stop-sequence
+throttle-aborts that precede some runs are omitted; <code>*</code> =
+excluded from the summary):</p>
+<table class="table">
+<colgroup>
+<col width="12%">
+<col width="12%">
+<col width="12%">
+<col width="12%">
+<col width="12%">
+<col width="12%">
+<col width="12%">
+<col width="12%">
+</colgroup>
+<thead><tr class="header">
+<th>paper</th>
+<th>skill</th>
+<th>rep</th>
+<th>output</th>
+<th>cache-read</th>
+<th>total tok</th>
+<th>cost</th>
+<th>wall-clock</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td>easy (1-cmt mAb)</td>
+<td>production</td>
+<td>1</td>
+<td>22,704</td>
+<td>2,477,773</td>
+<td>2,632,714</td>
+<td>$2.63</td>
+<td>568 s</td>
+</tr>
+<tr class="even">
+<td>easy (1-cmt mAb)</td>
+<td>production</td>
+<td>2</td>
+<td>34,137</td>
+<td>1,536,424</td>
+<td>1,696,937</td>
+<td>$2.41</td>
+<td>486 s</td>
+</tr>
+<tr class="odd">
+<td>easy (1-cmt mAb)</td>
+<td>production</td>
+<td>3</td>
+<td>24,313</td>
+<td>2,932,387</td>
+<td>3,188,931</td>
+<td>$3.53</td>
+<td>1015 s</td>
+</tr>
+<tr class="even">
+<td>easy (1-cmt mAb)</td>
+<td>lean</td>
+<td>1*</td>
+<td>27,126</td>
+<td>4,714,280</td>
+<td>4,888,691</td>
+<td>$3.96</td>
+<td>1667 s</td>
+</tr>
+<tr class="odd">
+<td>easy (1-cmt mAb)</td>
+<td>lean</td>
+<td>2</td>
+<td>22,578</td>
+<td>1,388,453</td>
+<td>1,505,667</td>
+<td>$1.85</td>
+<td>745 s</td>
+</tr>
+<tr class="even">
+<td>easy (1-cmt mAb)</td>
+<td>lean</td>
+<td>3</td>
+<td>19,444</td>
+<td>1,260,787</td>
+<td>1,369,686</td>
+<td>$1.68</td>
+<td>1116 s</td>
+</tr>
+<tr class="odd">
+<td>hard (2-cmt+MM, 13 cov)</td>
+<td>production</td>
+<td>1</td>
+<td>38,898</td>
+<td>5,675,022</td>
+<td>6,018,958</td>
+<td>$5.72</td>
+<td>863 s</td>
+</tr>
+<tr class="even">
+<td>hard (2-cmt+MM, 13 cov)</td>
+<td>production</td>
+<td>2</td>
+<td>38,102</td>
+<td>11,872,475</td>
+<td>12,366,126</td>
+<td>$9.74</td>
+<td>1439 s</td>
+</tr>
+<tr class="odd">
+<td>hard (2-cmt+MM, 13 cov)</td>
+<td>production</td>
+<td>3</td>
+<td>29,151</td>
+<td>4,506,228</td>
+<td>4,689,133</td>
+<td>$3.94</td>
+<td>695 s</td>
+</tr>
+<tr class="even">
+<td>hard (2-cmt+MM, 13 cov)</td>
+<td>lean</td>
+<td>1</td>
+<td>35,507</td>
+<td>4,869,027</td>
+<td>5,033,247</td>
+<td>$4.13</td>
+<td>2179 s</td>
+</tr>
+<tr class="odd">
+<td>hard (2-cmt+MM, 13 cov)</td>
+<td>lean</td>
+<td>2</td>
+<td>34,360</td>
+<td>6,404,502</td>
+<td>6,570,678</td>
+<td>$4.89</td>
+<td>1628 s</td>
+</tr>
+<tr class="even">
+<td>hard (2-cmt+MM, 13 cov)</td>
+<td>lean</td>
+<td>3</td>
+<td>45,083</td>
+<td>7,522,658</td>
+<td>7,766,024</td>
+<td>$6.13</td>
+<td>2569 s</td>
+</tr>
+</tbody>
+</table>
+<p><code>*</code> easy/lean/1 (the gate-failed task) also ran a
+<em>second</em> complete extraction (run 4: $1.66 / 1.23M total) before
+being killed; both excluded as a harness-config artifact, not a model
+failure.</p>
+<p>Means / medians over the included runs (cost | cache-read): easy
+production $2.86 / $2.63 | 2.32M vs lean <strong>$1.76 / $1.76 |
+1.32M</strong>; hard production $6.47 / $5.72 | 7.35M vs lean
+<strong>$5.05 / $4.89 | 6.27M</strong>.</p>
+<p>The headline is that <strong>the lean skill is cheaper on both papers
+— clearly on the simple model, modestly and noisily on the complex
+one.</strong> On the easy model it cut cost ~38 % (−43 % cache-read),
+mainly by collapsing several per-name lookups into one batched pre-brief
+and passing validation in one or two tries. On the hard model lean was
+~22 % cheaper by mean (~14 % by median) with less cache-read — but that
+gap is driven largely by <em>variance</em>: production’s worst run fell
+into a render-loop and cost $9.74 (the most expensive run in the set),
+whereas lean’s three runs were more consistent ($4.13–6.13). Per-run
+turn counts on the hard model were comparable (production ~58, lean
+~57). The honest reading is “cheaper-or-comparable and lower-variance on
+hard,” not a large guaranteed win, because the fragile hard vignette can
+trigger a render-loop blow-up under <em>either</em> skill.</p>
+<p>A wall-clock caveat orthogonal to tokens: lean was ~2× slower on the
+hard model because its unified
+<code>validate_model(level = "full")</code> re-runs a whole-package
+<code>R CMD check</code> plus render on every fix iteration — minutes of
+subprocess time that costs little in tokens but much in latency. Scoping
+that validator to the new model alone would remove the latency without
+giving up the token savings.</p>
+</div>
+<div class="section level3">
+<h3 id="where-the-tokens-go-across-the-production-corpus">4.7 Where the tokens go across the production corpus<a class="anchor" aria-label="anchor" href="#where-the-tokens-go-across-the-production-corpus"></a>
+</h3>
+<p>Sampling the 322 completed production extractions (all the production
+skill; cost range $0.40–$41.87, median $1.84) confirms and generalises
+Section 4.5. Almost all of the spend is <strong>cache-read — the agent’s
+accumulated context (skill + references + paper + the model/vignette
+under edit + every prior tool result) re-read on each turn — and it
+scales with the turn count:</strong></p>
+<table class="table">
+<thead><tr class="header">
+<th>run</th>
+<th>cost</th>
+<th>turns</th>
+<th>cache-read</th>
+<th>render calls</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td>cheapest</td>
+<td>$0.40</td>
+<td>8</td>
+<td>0.34M</td>
+<td>0</td>
+</tr>
+<tr class="even">
+<td>median-ish</td>
+<td>$1.85</td>
+<td>26</td>
+<td>1.45M</td>
+<td>0</td>
+</tr>
+<tr class="odd">
+<td>heavy</td>
+<td>$15.39</td>
+<td>86</td>
+<td>22.3M</td>
+<td>5</td>
+</tr>
+<tr class="even">
+<td>worst</td>
+<td>$41.87</td>
+<td>262</td>
+<td>71.0M</td>
+<td>105</td>
+</tr>
+</tbody>
+</table>
+<p>The distribution is heavily right-skewed: most runs converge in a
+handful of turns and stay cheap, while a small tail explodes. That tail
+is almost always a <strong>vignette-render fix loop</strong> — the
+$41.87 run issued 105 render calls, and the expensive runs all carry
+high render counts and many large (&gt;10k-token) tool results. Each
+failed render adds a turn, appends a large render log to the context,
+and forces the whole growing context to be re-read on every subsequent
+turn. So the biggest lever on <em>total</em> corpus spend is not the
+per-turn context (already modest once the 284k register is replaced by
+lookup) but <strong>capping or preventing the render loop</strong> —
+precisely the failure mode the lean skill’s unified validator must be
+careful not to amplify (Section 4.6).</p>
+</div>
 </div>
 <div class="section level2">
 <h2 id="discussion">5. Discussion<a class="anchor" aria-label="anchor" href="#discussion"></a>
 </h2>
-<p>Open questions and limitations to develop: where deterministic
-structure extraction stops and judgement begins; how much an archetype
-prior helps vs anchors; the failure modes of small-model distillation
-and why verification remains mandatory; the portability cost of
-depending on local infrastructure; and the boundary discipline between
-an ingestion package and the validated library it feeds.</p>
+<p>The levers in this package are aimed correctly — at <em>per-turn
+context</em> (register lookup, log filtering, a lean lazily-loaded
+skill) — and they save real money when triggered (lookup: ~37× on an
+isolated task). But the <strong>dominant</strong> cost driver in
+practice is the <strong>number of turns</strong>, which is a property of
+the dispatching agent’s discipline more than of the tooling. The
+practical conclusion is that the biggest savings come from a tuned,
+low-turn dispatch (as the production runner already is), with the
+input-side levers compounding on top.</p>
+<p>Several further input-side pre-processing steps follow directly from
+the cost model and are candidates for the low-turn path: a cheap
+local-LLM pass that reads the paper, identifies its covariates, and
+emits a <em>focused, model-specific covariate report</em> (paper name →
+canonical name/units/reference) so the agent neither loads the register
+nor spends turns looking covariates up; a <em>single code-based
+validation step</em> that runs parse, conventions, source-trace,
+registry-build, check, and vignette-render and returns one terse
+“Success” or a short list of file-and-line fixes, replacing the verbose
+logs that otherwise bloat every subsequent turn; and a <em>policy-driven
+sidecar auto-responder</em> that answers recurring stop-and-ask
+questions from a vetted policy table on the next tick, so a run
+continues on a warm cache instead of paying a cold retry. Each keeps the
+expensive judgement with the agent while moving deterministic or
+pre-decidable work off the per-turn critical path.</p>
+<p>Open limitations remain: the source-trace presence-vs-slot gap above;
+the portability cost of a local-LLM dependency (mitigated by graceful
+degradation); the reliance on small local models for distillation, which
+the source-trace firewall is designed to catch; and the boundary
+discipline between this ingestion package and the validated library it
+feeds, which must stay one-directional (consume, never reimplement
+validation).</p>
 </div>
 <div class="section level2">
 <h2 id="conclusion">6. Conclusion<a class="anchor" aria-label="anchor" href="#conclusion"></a>
