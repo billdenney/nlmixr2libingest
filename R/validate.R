@@ -43,12 +43,20 @@
 }
 
 .vConventions <- function(ui) {
-  if (!requireNamespace("nlmixr2lib", quietly = TRUE)) {
+  # Resolve checkModelConventions() dynamically rather than via `::`: it is a
+  # newer nlmixr2lib export, so a `nlmixr2lib::checkModelConventions` literal
+  # trips R CMD check's "Missing or unexported object" WARNING against older
+  # installed nlmixr2lib versions. getExportedValue() is checked at runtime.
+  ok <- requireNamespace("nlmixr2lib", quietly = TRUE) &&
+    "checkModelConventions" %in% getNamespaceExports("nlmixr2lib")
+  if (!ok) {
     return(.vIssue("conventions", "note", NA,
-                   "nlmixr2lib not installed; convention check skipped", NA))
+                   "checkModelConventions() unavailable in the installed nlmixr2lib; convention check skipped",
+                   "install a nlmixr2lib that exports checkModelConventions()"))
   }
+  check_conventions <- getExportedValue("nlmixr2lib", "checkModelConventions")
   iss <- tryCatch(
-    suppressWarnings(nlmixr2lib::checkModelConventions(ui, verbose = FALSE)),
+    suppressWarnings(check_conventions(ui, verbose = FALSE)),
     error = function(e) e)
   if (inherits(iss, "condition")) {
     return(.vIssue("conventions", "error", NA,

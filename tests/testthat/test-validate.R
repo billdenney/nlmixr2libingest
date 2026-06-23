@@ -42,3 +42,39 @@ test_that("print method renders without error for both outcomes", {
                         paper = "ka 1.57; CL/F 2.72; proportional error 50%.")
   expect_s3_class(print(res), "nli_validation")   # prints; returns invisibly
 })
+
+test_that("full tier handles the vignette-render outcomes", {
+  skip_if_not_installed("nlmixr2lib")
+  skip_if_not_installed("rxode2")
+  # no vignette supplied -> render is skipped with a note; stage still present
+  res <- validate_model("PK_1cmt", level = "full")
+  expect_true("render" %in% res$stages)
+  expect_false("check" %in% res$stages)            # no pkg -> check skipped
+  expect_true(any(res$issues$stage == "render" & res$issues$severity == "note"))
+  # a missing vignette path -> render error
+  res2 <- validate_model("PK_1cmt", level = "full", vignette = "/no/such/file.Rmd")
+  expect_true(any(res2$issues$stage == "render" & res2$issues$severity == "error"))
+})
+
+test_that("full tier renders a valid vignette cleanly (no issue rows)", {
+  skip_if_not_installed("nlmixr2lib")
+  skip_if_not_installed("rxode2")
+  skip_if_not_installed("rmarkdown")
+  skip_if_not(rmarkdown::pandoc_available())
+  rmd <- tempfile(fileext = ".Rmd")
+  writeLines(c("---", "title: t", "output: html_document", "---", "",
+               "```{r}", "1 + 1", "```"), rmd)
+  res <- validate_model("PK_1cmt", level = "full", vignette = rmd)
+  expect_equal(nrow(res$issues[res$issues$stage == "render", ]), 0L)
+})
+
+test_that("full tier surfaces an R CMD check failure", {
+  skip_if_not_installed("nlmixr2lib")
+  skip_if_not_installed("rxode2")
+  skip_if_not_installed("rcmdcheck")
+  res <- validate_model("PK_1cmt", level = "full",
+                        pkg = file.path(tempdir(), "definitely-no-such-pkg"))
+  expect_true("check" %in% res$stages)
+  expect_true(any(res$issues$stage == "check"))
+  expect_equal(res$status, "issues")
+})

@@ -1,0 +1,23 @@
+# Coverage status tolerances.
+#
+# Some code paths cannot run in CI and so cannot be unit-covered there:
+#   - local-LLM backends (llm.R, distill.R, the LLM branch of prebrief.R) need a
+#     running ollama server;
+#   - the full-tier R CMD check / vignette render in validate.R needs the whole
+#     package toolchain (pandoc, a buildable target).
+# Their unit-testable branches ARE covered; the integration paths are exercised
+# out-of-band. These targets keep coverage meaningful while not blocking a PR on
+# the unavoidable gaps above.
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 2%
+    patch:
+      default:
+        target: 70%
+        threshold: 3%
+comment:
+  layout: "reach, diff, files"
+  require_changes: false
