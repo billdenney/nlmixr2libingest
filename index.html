@@ -57,31 +57,46 @@
 <!-- badges: start -->
 
 <p>Token-efficient, quality-preserving tooling for ingesting published population-PK/PD models into <a href="https://github.com/nlmixr2/nlmixr2lib" class="external-link">nlmixr2lib</a> at scale.</p>
-<p>The cost of literature-model extraction is dominated by <code>cache_read × output</code> tokens across the build→check→fix loop — not by the paper itself. This package attacks that cost without weakening the <strong>quality firewall</strong>: an agent still source-traces every final <code>ini()</code> value <em>and any nonstandard <code>model()</code>-block equation</em> against the original paper. Every feature here is a cheaper input or a prior, never a gate on what the agent sees of the paper.</p>
+<p>The cost of agentic literature-model extraction is dominated by <code>cache_read × output</code> tokens across the build→check→fix loop — not by the paper itself. This package attacks that cost without weakening the <strong>quality firewall</strong>: the agent still source-traces every final <code>ini()</code> value <em>and any nonstandard <code>model()</code>-block equation</em> against the original paper. Every feature here is a cheaper input or a prior — never a gate on what the agent sees of the paper.</p>
 <div class="section level2">
 <h2 id="package-boundary">Package boundary<a class="anchor" aria-label="anchor" href="#package-boundary"></a>
 </h2>
 <p><code>nlmixr2libingest</code> is <strong>ingestion only</strong>. It <em>consumes</em> <code>nlmixr2lib</code> — its canonical-name registers, compiled model database, rxUi parse, and authoring API — but never reimplements model <strong>validation</strong>, which stays in <code>nlmixr2lib::checkModelConventions()</code>.</p>
 </div>
 <div class="section level2">
-<h2 id="phase-0-current">Phase 0 (current)<a class="anchor" aria-label="anchor" href="#phase-0-current"></a>
+<h2 id="what-it-provides">What it provides<a class="anchor" aria-label="anchor" href="#what-it-provides"></a>
 </h2>
 <ul>
 <li>
-<strong><code><a href="reference/filter_check_log.html">filter_check_log()</a></code> / <code><a href="reference/filter_render_log.html">filter_render_log()</a></code></strong> + <code>inst/scripts/rcheck.sh</code> — deterministically reduce <code>devtools::check()</code> / vignette-render logs to the ERROR/WARNING/NOTE lines and failing chunks. Deterministic on purpose: a dropped error is a quality regression, so no LLM summarisation here.</li>
+<strong>Output filtering</strong> — <code><a href="reference/filter_check_log.html">filter_check_log()</a></code> / <code><a href="reference/filter_render_log.html">filter_render_log()</a></code> and <code>inst/scripts/rcheck.sh</code> deterministically reduce <code>devtools::check()</code> / vignette-render logs to ERROR/WARNING/NOTE lines and failing chunks (deterministic on purpose: a dropped error is a quality regression).</li>
 <li>
-<strong><code><a href="reference/lookup_canonical.html">lookup_canonical()</a></code></strong> + <code>inst/scripts/lookup.R</code> — a DuckDB full-text index over the three <code>nlmixr2lib</code> registers (covariate ≈284k tokens, compartment, parameter). Returns the few relevant entries instead of the whole file. The index rebuilds only when a source register changes (size/mtime/md5), cached per session with a 1-day TTL.</li>
+<strong>Register lookup</strong> — <code><a href="reference/lookup_canonical.html">lookup_canonical()</a></code> and <code>inst/scripts/lookup.R</code>: a DuckDB full-text index over the three <code>nlmixr2lib</code> registers returns the few relevant entries (~1–2k tokens) instead of reading the ~284k-token covariate file. The index rebuilds only when a source register changes (size/mtime/md5), with a per-session TTL.</li>
+<li>
+<strong>Structural features &amp; archetypes</strong> — <code><a href="reference/model_features.html">model_features()</a></code> / <code><a href="reference/build_feature_table.html">build_feature_table()</a></code> parse every library model into a structural feature table; <code><a href="reference/assign_archetype.html">assign_archetype()</a></code> / <code><a href="reference/archetype_taxonomy.html">archetype_taxonomy()</a></code> / <code><a href="reference/archetype_template.html">archetype_template()</a></code> derive an interpretable archetype taxonomy (with an explicit <code>other</code> bucket) and starting templates; <code><a href="reference/cluster_features.html">cluster_features()</a></code> gives a data-driven cross-check.</li>
+<li>
+<strong>Fittable / archetype classifier</strong> — <code><a href="reference/build_store.html">build_store()</a></code> / <code><a href="reference/classify.html">classify()</a></code> over a labelled corpus (TF-IDF always; embeddings when a local LLM is available, via <code><a href="reference/embed_text.html">embed_text()</a></code>), predicting whether a paper is a fittable popPK/PD model and a top-archetype prior. Outputs are priors for annotate-first screening, not auto-decisions.</li>
+<li>
+<strong>Source-trace pre-check</strong> — <code><a href="reference/source_trace.html">source_trace()</a></code> searches the paper for a supporting number for each final <code>ini()</code> value (back-transform- and rounding-tolerant) and flags those with none, plus the structural <code>model()</code> equations and hardcoded constants to verify. It assists, never replaces, the mandatory manual source-trace.</li>
+<li>
+<strong>Soft budget backstop</strong> — <code><a href="reference/complexity_tier.html">complexity_tier()</a></code> / <code><a href="reference/budget_advisor.html">budget_advisor()</a></code> give a complexity-scaled, gracefully-escalating token budget (continue → checkpoint → checkpoint-and-escalate, never a hard kill); <code><a href="reference/run_token_stats.html">run_token_stats()</a></code> summarises the runner’s per-run token/cost records.</li>
+<li>
+<strong>Distillation</strong> — <code><a href="reference/distill_paper.html">distill_paper()</a></code> produces an advisory structured extraction sheet via a local LLM (LLM-optional; <code>NULL</code> with no backend).</li>
 </ul>
 </div>
 <div class="section level2">
 <h2 id="portability">Portability<a class="anchor" aria-label="anchor" href="#portability"></a>
 </h2>
-<p>Hard dependencies are CRAN-only (<code>DBI</code>, <code>duckdb</code>, <code>cli</code>, <code>stringr</code>, <code>jsonlite</code>). The optional local-LLM features (later phases: distillation, embedding-based classification) degrade gracefully — with no LLM configured, the deterministic levers (log filtering, register lookup, model features, source-trace) all still run, and classification falls back to keyword matching.</p>
+<p>Hard dependencies are CRAN-only (<code>DBI</code>, <code>duckdb</code>, <code>cli</code>, <code>jsonlite</code>). The local-LLM features (embedding-based classification, distillation) are optional and degrade gracefully — with no LLM configured, the deterministic levers (log filtering, register lookup, features/archetypes, source-trace) all still run and classification falls back to keyword matching.</p>
 </div>
 <div class="section level2">
-<h2 id="roadmap">Roadmap<a class="anchor" aria-label="anchor" href="#roadmap"></a>
+<h2 id="status">Status<a class="anchor" aria-label="anchor" href="#status"></a>
 </h2>
-<p>See <code>inst/design/ARCHITECTURE.md</code> (engineering) and <code>vignettes/articles/ingestion-challenges.Rmd</code> (the seed of a methods paper on ingesting four decades of non-standardised popPK literature). Phases 1–3 add model features + archetype templates, a fittable/archetype classifier, and local-LLM-assisted distillation with a soft budget backstop.</p>
+<p>Phases 0–3 are implemented and tested (<code>devtools::check</code> clean). The remaining work is integration — wiring <code><a href="reference/lookup_canonical.html">lookup_canonical()</a></code>, <code>rcheck.sh</code>, <code><a href="reference/source_trace.html">source_trace()</a></code>, and the fittable classifier into the <code>extract-literature-model</code> skill and the ingestion runner’s pre-dispatch hook.</p>
+</div>
+<div class="section level2">
+<h2 id="design">Design<a class="anchor" aria-label="anchor" href="#design"></a>
+</h2>
+<p>See <code>inst/design/ARCHITECTURE.md</code> for the engineering design and <code>vignettes/articles/ingestion-challenges.Rmd</code> for the methods-paper narrative on ingesting four decades of non-standardised popPK literature.</p>
 </div>
 </div>
   </main><aside class="col-md-3"><div class="links">
