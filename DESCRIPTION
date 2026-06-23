@@ -32,6 +32,7 @@ Suggests:
     httr2,
     knitr,
     nlmixr2lib,
+    rcmdcheck,
     rmarkdown,
     rxode2,
     testthat (>= 3.0.0),
