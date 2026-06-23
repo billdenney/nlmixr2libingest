@@ -60,7 +60,7 @@ render. Convention checking is delegated to
     <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">validate_model</span><span class="op">(</span></span>
 <span>  <span class="va">model</span>,</span>
 <span>  paper <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  level <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"fast"</span>, <span class="st">"full"</span><span class="op">)</span>,</span>
+<span>  level <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"fast"</span>, <span class="st">"full"</span>, <span class="st">"model"</span><span class="op">)</span>,</span>
 <span>  pkg <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  vignette <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  tol <span class="op">=</span> <span class="fl">0.05</span></span>
@@ -80,12 +80,15 @@ render. Convention checking is delegated to
 
 
 <dt id="arg-level">level<a class="anchor" aria-label="anchor" href="#arg-level"></a></dt>
-<dd><p><code>"fast"</code> (parse + conventions + source-trace) or <code>"full"</code>
-(adds R CMD check and vignette render).</p></dd>
+<dd><p><code>"fast"</code> (parse + conventions + source-trace), <code>"model"</code> (adds a
+one-session <code>load_all</code> of <code>pkg</code> + the model's vignette render – the
+per-iteration combined gate, <em>no</em> whole-package check), or <code>"full"</code> (adds a
+whole-package R CMD check + render; the pre-commit gate).</p></dd>
 
 
 <dt id="arg-pkg">pkg<a class="anchor" aria-label="anchor" href="#arg-pkg"></a></dt>
-<dd><p>Package directory for the full-tier R CMD check.</p></dd>
+<dd><p>Package directory: <code>load_all</code>-ed for the <code>model</code> tier, R-CMD-checked
+for the <code>full</code> tier.</p></dd>
 
 
 <dt id="arg-vignette">vignette<a class="anchor" aria-label="anchor" href="#arg-vignette"></a></dt>

@@ -70,12 +70,24 @@ in `nlmixr2lib::checkModelConventions()`.
   (LLM-optional; `NULL` with no backend).
 - **Unified validation** —
   [`validate_model()`](reference/validate_model.md) runs the whole chain
-  (parse → `checkModelConventions()` →
-  [`source_trace()`](reference/source_trace.md), plus optional R CMD
-  check and a filtered vignette render) and returns one terse *Success /
-  fix-list* instead of the multi-thousand-line logs that otherwise
-  re-cache every turn. CLI: `inst/scripts/validate.R` (exit 0 = success,
-  1 = issues).
+  and returns one terse *Success / fix-list* instead of the
+  multi-thousand-line logs that otherwise re-cache every turn. Three
+  tiers: `fast` (parse → `checkModelConventions()` →
+  [`source_trace()`](reference/source_trace.md)), `model` (adds a
+  one-session `load_all` + the model’s vignette render — the
+  **per-iteration combined gate**, deliberately *without* the
+  whole-package check), and `full` (adds the whole-package R CMD check —
+  the pre-commit gate). CLI: `inst/scripts/validate.R` (`--model` /
+  `--full`; exit 0 = success, 1 = issues).
+- **Vignette pre-lint** —
+  [`lint_vignette()`](reference/lint_vignette.md) statically scans a
+  validation vignette for the common render-killers (a `cmt =`
+  referencing an algebraic observable, a named-vector character
+  subscript to `amt =`, a PKNCA `time = 0`-dropping filter, a simulated
+  cohort over the per-arm cap) *before* the expensive render, so they
+  are fixed without a render round-trip. High-precision (numeric `amt`
+  subscripts and non-PKNCA filters are not flagged); a prior, not a
+  gate. CLI: `inst/scripts/lint_vignette.R`.
 - **Naming pre-brief** —
   [`naming_prebrief()`](reference/naming_prebrief.md) resolves a paper’s
   covariates (and optionally parameters/compartments) to canonical names
@@ -104,15 +116,14 @@ falls back to keyword matching.
 
 ## Status
 
-Phases 0–3 plus the three input-side levers above (unified validation,
-naming pre-brief, sidecar policy responder) are implemented and tested
-(`devtools::check` clean). The remaining work is integration — wiring
-[`naming_prebrief()`](reference/naming_prebrief.md) /
-[`lookup_canonical()`](reference/lookup_canonical.md),
-[`validate_model()`](reference/validate_model.md) / `rcheck.sh`, and
-[`source_trace()`](reference/source_trace.md) into the
-`extract-literature-model` skill; the fittable classifier into the
-runner’s pre-dispatch hook; and `sidecar_respond.R` into the runner’s
+Phases 0–3 plus the input-side levers above are implemented and tested
+(`devtools::check` clean). The `extract-literature-model` skill now
+wires in [`naming_prebrief()`](reference/naming_prebrief.md), the
+[`source_trace()`](reference/source_trace.md) pre-check, the combined
+`validate_model(level = "model")` gate, and
+[`lint_vignette()`](reference/lint_vignette.md) (staged in a nlmixr2lib
+PR). The remaining integration is the fittable classifier into the
+runner’s pre-dispatch hook, and `sidecar_respond.R` into the runner’s
 sidecar watcher.
 
 ## Design
@@ -162,6 +173,8 @@ literature.
   devtools::check log to the parts that matter
 - [`filter_render_log()`](filter_render_log.md) : Filter an rmarkdown /
   knitr render log to the failure and its context
+- [`lint_vignette()`](lint_vignette.md) : Statically pre-lint a
+  validation vignette for common render-killers
 - [`lookup_canonical()`](lookup_canonical.md) : Look up canonical names
   in the nlmixr2lib registers
 - [`model_features()`](model_features.md) : Structural features for a

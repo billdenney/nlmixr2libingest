@@ -14,7 +14,7 @@ it.
 validate_model(
   model,
   paper = NULL,
-  level = c("fast", "full"),
+  level = c("fast", "full", "model"),
   pkg = NULL,
   vignette = NULL,
   tol = 0.05
@@ -33,12 +33,15 @@ validate_model(
 
 - level:
 
-  `"fast"` (parse + conventions + source-trace) or `"full"` (adds R CMD
-  check and vignette render).
+  `"fast"` (parse + conventions + source-trace), `"model"` (adds a
+  one-session `load_all` of `pkg` + the model's vignette render – the
+  per-iteration combined gate, *no* whole-package check), or `"full"`
+  (adds a whole-package R CMD check + render; the pre-commit gate).
 
 - pkg:
 
-  Package directory for the full-tier R CMD check.
+  Package directory: `load_all`-ed for the `model` tier, R-CMD-checked
+  for the `full` tier.
 
 - vignette:
 

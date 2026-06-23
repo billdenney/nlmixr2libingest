@@ -38,6 +38,8 @@
   devtools::check log to the parts that matter
 - [`filter_render_log()`](filter_render_log.md) : Filter an rmarkdown /
   knitr render log to the failure and its context
+- [`lint_vignette()`](lint_vignette.md) : Statically pre-lint a
+  validation vignette for common render-killers
 - [`lookup_canonical()`](lookup_canonical.md) : Look up canonical names
   in the nlmixr2lib registers
 - [`model_features()`](model_features.md) : Structural features for a
