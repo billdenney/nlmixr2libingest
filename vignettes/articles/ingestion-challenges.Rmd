@@ -196,6 +196,53 @@ context × turns, a ~10× turn inflation produced a ~10× cost inflation. The si
 correctly-declined case (23 turns) was the only one that matched the original's
 cost.
 
+### 4.6 Supervised A/B on the live runner: the levers in a real extraction
+
+Section 4.4 measured one lever in isolation; here the *combined* token-minimising
+skill is measured end-to-end against the production skill on the real dispatch
+runner, with full RunRecord telemetry (the accurate vehicle the earlier ad-hoc
+probes lacked). Two skills were compared: the production `extract-literature-model`
+and a `-lean` variant that (i) resolves every canonical covariate/parameter name
+in one batched pre-brief instead of a lookup per name, and (ii) replaces the
+separate vignette-render, convention-lint, and `R CMD check` gates with a single
+`validate_model(level = "full")` call. Everything else was held fixed — same two
+papers, same model (`claude-opus-4-7`), same effort, one task at a time on a
+single account, byte-identical prompts except the skill name — and each cell was
+run in triplicate.
+
+*Aside (baseline provenance, for a later detailed write-up): the production skill
+is `extract-literature-model` at nlmixr2lib commit `dc10fec8` (`origin/main` at
+experiment time); the lean variant was committed at `2226ba8f`. Two of the twelve
+runs were dropped as unreliable — one to an output-evidence-gate misconfiguration
+(a complete extraction flagged "no output" because the task neither committed nor
+declared a deliverable file), and one to a corrupted usage capture ($9.74 billed
+against an implausible 102 output tokens).*
+
+| paper | skill | n | mean cost | mean cache-read | mean wall-clock |
+|---|---|---|---|---|---|
+| 1-cmt mAb (easy) | production | 3 | $2.86 | 2.32M | 690 s |
+| 1-cmt mAb (easy) | **lean** | 2 | **$1.77** | **1.32M** | 930 s |
+| 2-cmt parallel-linear + MM, 13 cov (hard) | production | 2 | $4.83 | 5.09M | 779 s |
+| 2-cmt parallel-linear + MM, 13 cov (hard) | **lean** | 3 | $5.05 | 6.27M | 2125 s |
+
+The headline is that **the token-minimising skill's benefit is
+complexity-dependent, not universal.** On the easy model the lean variant was
+~38 % cheaper (−43 % cache-read); on the hard model it was ~5 % *more* expensive
+(+23 % cache-read) and ~2.7× slower in wall-clock. The batched pre-brief saves
+turns when a paper has many covariates, but on the complex model that saving was
+more than offset by the unified `validate_model(level = "full")` step — a full
+`R CMD check` plus vignette render over the entire library — and by the lean
+agent simply taking more turns. Run-to-run variance was large (the easy-model
+production runs spanned $2.41–3.53; one banked lean run cost $3.96 against a
+typical ~$1.7), which is why cells were replicated; even so n is small and the
+hard-model figure should be read as "no clear win," not a precise penalty.
+
+This is consistent with Section 4.5: the dominant lever is *turn count*, and an
+input-side skill change helps most when the extraction is otherwise short. When a
+model is complex, a validation step that is itself heavy can erase the input-side
+savings — so the unified validator should be scoped to the new model rather than
+rebuilding the whole package before being adopted as a default.
+
 ## 5. Discussion
 
 The levers in this package are aimed correctly — at *per-turn context* (register
