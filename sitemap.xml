@@ -25,15 +25,21 @@
 <url><loc>/reference/index.html</loc></url>
 <url><loc>/reference/lookup_canonical.html</loc></url>
 <url><loc>/reference/model_features.html</loc></url>
+<url><loc>/reference/naming_prebrief.html</loc></url>
 <url><loc>/reference/nearest.html</loc></url>
 <url><loc>/reference/nlmixr2libingest-package.html</loc></url>
 <url><loc>/reference/parse_registers.html</loc></url>
 <url><loc>/reference/register_db_path.html</loc></url>
 <url><loc>/reference/registers_dir.html</loc></url>
 <url><loc>/reference/render_lookup.html</loc></url>
+<url><loc>/reference/render_prebrief.html</loc></url>
 <url><loc>/reference/run_token_stats.html</loc></url>
 <url><loc>/reference/save_store.html</loc></url>
+<url><loc>/reference/sidecar_match.html</loc></url>
+<url><loc>/reference/sidecar_policy.html</loc></url>
+<url><loc>/reference/sidecar_respond.html</loc></url>
 <url><loc>/reference/source_trace.html</loc></url>
 <url><loc>/reference/tier_budget.html</loc></url>
+<url><loc>/reference/validate_model.html</loc></url>
 </urlset>
 

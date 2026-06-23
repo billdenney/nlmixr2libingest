@@ -81,6 +81,12 @@
 <strong>Soft budget backstop</strong> — <code><a href="reference/complexity_tier.html">complexity_tier()</a></code> / <code><a href="reference/budget_advisor.html">budget_advisor()</a></code> give a complexity-scaled, gracefully-escalating token budget (continue → checkpoint → checkpoint-and-escalate, never a hard kill); <code><a href="reference/run_token_stats.html">run_token_stats()</a></code> summarises the runner’s per-run token/cost records.</li>
 <li>
 <strong>Distillation</strong> — <code><a href="reference/distill_paper.html">distill_paper()</a></code> produces an advisory structured extraction sheet via a local LLM (LLM-optional; <code>NULL</code> with no backend).</li>
+<li>
+<strong>Unified validation</strong> — <code><a href="reference/validate_model.html">validate_model()</a></code> runs the whole chain (parse → <code>checkModelConventions()</code> → <code><a href="reference/source_trace.html">source_trace()</a></code>, plus optional R CMD check and a filtered vignette render) and returns one terse <em>Success / fix-list</em> instead of the multi-thousand-line logs that otherwise re-cache every turn. CLI: <code>inst/scripts/validate.R</code> (exit 0 = success, 1 = issues).</li>
+<li>
+<strong>Naming pre-brief</strong> — <code><a href="reference/naming_prebrief.html">naming_prebrief()</a></code> resolves a paper’s covariates (and optionally parameters/compartments) to canonical names <em>once</em>, up front, so the agent ingests one small report instead of loading the ~136k-token register or looking terms up turn-by-turn. Deterministic register scan ∪ optional LLM augmentation; a prior, not a gate. CLI: <code>inst/scripts/prebrief.R</code>.</li>
+<li>
+<strong>Sidecar policy responder</strong> — <code><a href="reference/sidecar_respond.html">sidecar_respond()</a></code> auto-answers rule-like runner stop-and-ask pauses from a vetted policy table (<code>inst/policy/sidecar-policy.yaml</code>, mined from 1760 sidecar records) so a run continues on a warm cache instead of a cold retry. It only ever selects an option the agent was already offered, fires on a single policy, and escalates everything judgement-dependent to a human; every auto-answer is audited. CLI: <code>inst/scripts/sidecar_respond.R</code>.</li>
 </ul>
 </div>
 <div class="section level2">
@@ -91,7 +97,7 @@
 <div class="section level2">
 <h2 id="status">Status<a class="anchor" aria-label="anchor" href="#status"></a>
 </h2>
-<p>Phases 0–3 are implemented and tested (<code>devtools::check</code> clean). The remaining work is integration — wiring <code><a href="reference/lookup_canonical.html">lookup_canonical()</a></code>, <code>rcheck.sh</code>, <code><a href="reference/source_trace.html">source_trace()</a></code>, and the fittable classifier into the <code>extract-literature-model</code> skill and the ingestion runner’s pre-dispatch hook.</p>
+<p>Phases 0–3 plus the three input-side levers above (unified validation, naming pre-brief, sidecar policy responder) are implemented and tested (<code>devtools::check</code> clean). The remaining work is integration — wiring <code><a href="reference/naming_prebrief.html">naming_prebrief()</a></code> / <code><a href="reference/lookup_canonical.html">lookup_canonical()</a></code>, <code><a href="reference/validate_model.html">validate_model()</a></code> / <code>rcheck.sh</code>, and <code><a href="reference/source_trace.html">source_trace()</a></code> into the <code>extract-literature-model</code> skill; the fittable classifier into the runner’s pre-dispatch hook; and <code>sidecar_respond.R</code> into the runner’s sidecar watcher.</p>
 </div>
 <div class="section level2">
 <h2 id="design">Design<a class="anchor" aria-label="anchor" href="#design"></a>

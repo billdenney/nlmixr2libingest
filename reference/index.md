@@ -42,6 +42,8 @@
   in the nlmixr2lib registers
 - [`model_features()`](model_features.md) : Structural features for a
   single nlmixr2lib model
+- [`naming_prebrief()`](naming_prebrief.md) : Build a model-specific
+  naming pre-brief from a paper
 - [`nearest()`](nearest.md) : Nearest neighbours of a query string in a
   store
 - [`parse_registers()`](parse_registers.md) : Parse the nlmixr2lib
@@ -52,10 +54,20 @@
   canonical-name register directory
 - [`render_lookup()`](render_lookup.md) : Render lookup results as
   compact markdown (for CLI / agent consumption)
+- [`render_prebrief()`](render_prebrief.md) : Render a naming pre-brief
+  as compact markdown
 - [`run_token_stats()`](run_token_stats.md) : Token / cost analytics
   over the runner's RunRecords
 - [`save_store()`](save_store.md) [`load_store()`](save_store.md) : Save
   / load a similarity store
+- [`sidecar_match()`](sidecar_match.md) : Decide, per question, whether
+  a sidecar request is auto-answerable
+- [`sidecar_policy()`](sidecar_policy.md) : Load the sidecar auto-answer
+  policy table
+- [`sidecar_respond()`](sidecar_respond.md) : Auto-answer a sidecar
+  request when policy permits
 - [`source_trace()`](source_trace.md) : Programmatic source-trace
   pre-check for a model against its paper
 - [`tier_budget()`](tier_budget.md) : Token budget for a complexity tier
+- [`validate_model()`](validate_model.md) : Validate a model (and
+  optionally its vignette) into one terse result

@@ -68,6 +68,30 @@ in `nlmixr2lib::checkModelConventions()`.
 - **Distillation** — [`distill_paper()`](reference/distill_paper.md)
   produces an advisory structured extraction sheet via a local LLM
   (LLM-optional; `NULL` with no backend).
+- **Unified validation** —
+  [`validate_model()`](reference/validate_model.md) runs the whole chain
+  (parse → `checkModelConventions()` →
+  [`source_trace()`](reference/source_trace.md), plus optional R CMD
+  check and a filtered vignette render) and returns one terse *Success /
+  fix-list* instead of the multi-thousand-line logs that otherwise
+  re-cache every turn. CLI: `inst/scripts/validate.R` (exit 0 = success,
+  1 = issues).
+- **Naming pre-brief** —
+  [`naming_prebrief()`](reference/naming_prebrief.md) resolves a paper’s
+  covariates (and optionally parameters/compartments) to canonical names
+  *once*, up front, so the agent ingests one small report instead of
+  loading the ~136k-token register or looking terms up turn-by-turn.
+  Deterministic register scan ∪ optional LLM augmentation; a prior, not
+  a gate. CLI: `inst/scripts/prebrief.R`.
+- **Sidecar policy responder** —
+  [`sidecar_respond()`](reference/sidecar_respond.md) auto-answers
+  rule-like runner stop-and-ask pauses from a vetted policy table
+  (`inst/policy/sidecar-policy.yaml`, mined from 1760 sidecar records)
+  so a run continues on a warm cache instead of a cold retry. It only
+  ever selects an option the agent was already offered, fires on a
+  single policy, and escalates everything judgement-dependent to a
+  human; every auto-answer is audited. CLI:
+  `inst/scripts/sidecar_respond.R`.
 
 ## Portability
 
@@ -80,12 +104,16 @@ falls back to keyword matching.
 
 ## Status
 
-Phases 0–3 are implemented and tested (`devtools::check` clean). The
-remaining work is integration — wiring
-[`lookup_canonical()`](reference/lookup_canonical.md), `rcheck.sh`,
-[`source_trace()`](reference/source_trace.md), and the fittable
-classifier into the `extract-literature-model` skill and the ingestion
-runner’s pre-dispatch hook.
+Phases 0–3 plus the three input-side levers above (unified validation,
+naming pre-brief, sidecar policy responder) are implemented and tested
+(`devtools::check` clean). The remaining work is integration — wiring
+[`naming_prebrief()`](reference/naming_prebrief.md) /
+[`lookup_canonical()`](reference/lookup_canonical.md),
+[`validate_model()`](reference/validate_model.md) / `rcheck.sh`, and
+[`source_trace()`](reference/source_trace.md) into the
+`extract-literature-model` skill; the fittable classifier into the
+runner’s pre-dispatch hook; and `sidecar_respond.R` into the runner’s
+sidecar watcher.
 
 ## Design
 
