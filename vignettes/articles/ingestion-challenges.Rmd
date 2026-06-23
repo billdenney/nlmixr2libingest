@@ -196,6 +196,108 @@ context × turns, a ~10× turn inflation produced a ~10× cost inflation. The si
 correctly-declined case (23 turns) was the only one that matched the original's
 cost.
 
+### 4.6 Supervised A/B on the live runner: the levers in a real extraction
+
+Section 4.4 measured one lever in isolation; here the *combined* token-minimising
+skill is measured end-to-end against the production skill on the real dispatch
+runner, with full RunRecord telemetry (the accurate vehicle the earlier ad-hoc
+probes lacked). Two skills were compared: the production `extract-literature-model`
+and a `-lean` variant that (i) resolves every canonical covariate/parameter name
+in one batched pre-brief instead of a lookup per name, and (ii) replaces the
+separate vignette-render, convention-lint, and `R CMD check` gates with a single
+`validate_model(level = "full")` call. Everything else was held fixed — same two
+papers, same model (`claude-opus-4-7`), same effort, one task at a time on a
+single account, byte-identical prompts except the skill name — and each cell was
+run in triplicate.
+
+*Aside (baseline provenance, for a later detailed write-up): the production skill
+is `extract-literature-model` at nlmixr2lib commit `dc10fec8` (`origin/main` at
+experiment time); the lean variant was committed at `2226ba8f`. All per-run
+figures are re-derived from the per-attempt `result` events (the authoritative
+totals `claude` reports), not the runner's summary RunRecord, because one
+attempt's RunRecord proved unreliable (see below). One run is excluded:
+easy/lean/1, a complete extraction the output-evidence gate wrongly flagged "no
+output" because the task neither committed nor declared a deliverable file — a
+harness-config error, since corrected, not a model failure.*
+
+A second run, hard/production/2, first looked anomalous (its RunRecord showed 102
+output tokens) but is in fact a **real, expensive run** and is included: its
+attempt held three `claude` invocations (an 81-turn extraction plus two resumes),
+and the RunRecord captured only the last resume's per-call usage while the cost
+($9.74) was cumulative; from the `result` events it is a render-loop extraction
+of 38k output / 11.9M cache-read.
+
+Every individual extraction run (the `$0` stop-sequence throttle-aborts that
+precede some runs are omitted; `*` = excluded from the summary):
+
+| paper | skill | rep | output | cache-read | total tok | cost | wall-clock |
+|---|---|---|---|---|---|---|---|
+| easy (1-cmt mAb) | production | 1 | 22,704 | 2,477,773 | 2,632,714 | $2.63 | 568 s |
+| easy (1-cmt mAb) | production | 2 | 34,137 | 1,536,424 | 1,696,937 | $2.41 | 486 s |
+| easy (1-cmt mAb) | production | 3 | 24,313 | 2,932,387 | 3,188,931 | $3.53 | 1015 s |
+| easy (1-cmt mAb) | lean | 1\* | 27,126 | 4,714,280 | 4,888,691 | $3.96 | 1667 s |
+| easy (1-cmt mAb) | lean | 2 | 22,578 | 1,388,453 | 1,505,667 | $1.85 | 745 s |
+| easy (1-cmt mAb) | lean | 3 | 19,444 | 1,260,787 | 1,369,686 | $1.68 | 1116 s |
+| hard (2-cmt+MM, 13 cov) | production | 1 | 38,898 | 5,675,022 | 6,018,958 | $5.72 | 863 s |
+| hard (2-cmt+MM, 13 cov) | production | 2 | 38,102 | 11,872,475 | 12,366,126 | $9.74 | 1439 s |
+| hard (2-cmt+MM, 13 cov) | production | 3 | 29,151 | 4,506,228 | 4,689,133 | $3.94 | 695 s |
+| hard (2-cmt+MM, 13 cov) | lean | 1 | 35,507 | 4,869,027 | 5,033,247 | $4.13 | 2179 s |
+| hard (2-cmt+MM, 13 cov) | lean | 2 | 34,360 | 6,404,502 | 6,570,678 | $4.89 | 1628 s |
+| hard (2-cmt+MM, 13 cov) | lean | 3 | 45,083 | 7,522,658 | 7,766,024 | $6.13 | 2569 s |
+
+`*` easy/lean/1 (the gate-failed task) also ran a *second* complete extraction
+(run 4: $1.66 / 1.23M total) before being killed; both excluded as a
+harness-config artifact, not a model failure.
+
+Means / medians over the included runs (cost | cache-read): easy production
+$2.86 / $2.63 | 2.32M vs lean **$1.76 / $1.76 | 1.32M**; hard production $6.47 /
+$5.72 | 7.35M vs lean **$5.05 / $4.89 | 6.27M**.
+
+The headline is that **the lean skill is cheaper on both papers — clearly on the
+simple model, modestly and noisily on the complex one.** On the easy model it cut
+cost ~38 % (−43 % cache-read), mainly by collapsing several per-name lookups into
+one batched pre-brief and passing validation in one or two tries. On the hard
+model lean was ~22 % cheaper by mean (~14 % by median) with less cache-read — but
+that gap is driven largely by *variance*: production's worst run fell into a
+render-loop and cost $9.74 (the most expensive run in the set), whereas lean's
+three runs were more consistent ($4.13–6.13). Per-run turn counts on the hard
+model were comparable (production ~58, lean ~57). The honest reading is
+"cheaper-or-comparable and lower-variance on hard," not a large guaranteed win,
+because the fragile hard vignette can trigger a render-loop blow-up under *either*
+skill.
+
+A wall-clock caveat orthogonal to tokens: lean was ~2× slower on the hard model
+because its unified `validate_model(level = "full")` re-runs a whole-package
+`R CMD check` plus render on every fix iteration — minutes of subprocess time
+that costs little in tokens but much in latency. Scoping that validator to the
+new model alone would remove the latency without giving up the token savings.
+
+### 4.7 Where the tokens go across the production corpus
+
+Sampling the 322 completed production extractions (all the production skill; cost
+range $0.40–$41.87, median $1.84) confirms and generalises Section 4.5. Almost
+all of the spend is **cache-read — the agent's accumulated context (skill +
+references + paper + the model/vignette under edit + every prior tool result)
+re-read on each turn — and it scales with the turn count:**
+
+| run | cost | turns | cache-read | render calls |
+|---|---|---|---|---|
+| cheapest | $0.40 | 8 | 0.34M | 0 |
+| median-ish | $1.85 | 26 | 1.45M | 0 |
+| heavy | $15.39 | 86 | 22.3M | 5 |
+| worst | $41.87 | 262 | 71.0M | 105 |
+
+The distribution is heavily right-skewed: most runs converge in a handful of
+turns and stay cheap, while a small tail explodes. That tail is almost always a
+**vignette-render fix loop** — the $41.87 run issued 105 render calls, and the
+expensive runs all carry high render counts and many large (>10k-token) tool
+results. Each failed render adds a turn, appends a large render log to the
+context, and forces the whole growing context to be re-read on every subsequent
+turn. So the biggest lever on *total* corpus spend is not the per-turn context
+(already modest once the 284k register is replaced by lookup) but
+**capping or preventing the render loop** — precisely the failure mode the lean
+skill's unified validator must be careful not to amplify (Section 4.6).
+
 ## 5. Discussion
 
 The levers in this package are aimed correctly — at *per-turn context* (register
