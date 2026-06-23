@@ -78,3 +78,15 @@ test_that("full tier surfaces an R CMD check failure", {
   expect_true(any(res$issues$stage == "check"))
   expect_equal(res$status, "issues")
 })
+
+test_that("model tier runs load_all + render but never the whole-package check", {
+  skip_if_not_installed("nlmixr2lib")
+  skip_if_not_installed("rxode2")
+  # no pkg -> load_all is a note; no vignette -> render is a note. The point is
+  # the staging: load_all + render present, whole-package check absent.
+  res <- validate_model("PK_1cmt", level = "model")
+  expect_true("load_all" %in% res$stages)
+  expect_true("render" %in% res$stages)
+  expect_false("check" %in% res$stages)
+  expect_equal(res$level, "model")
+})

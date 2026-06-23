@@ -32,6 +32,7 @@ Suggests:
     httr2,
     knitr,
     nlmixr2lib,
+    pkgload,
     rcmdcheck,
     rmarkdown,
     rxode2,

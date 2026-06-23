@@ -161,6 +161,32 @@
           "fix the failing vignette chunk shown above")
 }
 
+# Load the in-development package from the worktree (once) so the render and
+# convention checks see the model under edit, not the stale installed package.
+# This is the per-iteration setup the skill otherwise does as a separate
+# `devtools::load_all()` call; folding it in collapses a turn + a reload.
+.vLoadAll <- function(pkg) {
+  if (is.null(pkg)) {
+    return(.vIssue("load_all", "note", NA,
+                   "no pkg supplied; render uses the installed package", NA))
+  }
+  if (!requireNamespace("pkgload", quietly = TRUE)) {
+    return(.vIssue("load_all", "note", NA,
+                   "pkgload not installed; render uses the installed package",
+                   "install.packages('pkgload') so the render sees the worktree"))
+  }
+  res <- tryCatch({
+    suppressMessages(pkgload::load_all(pkg, quiet = TRUE))
+    TRUE
+  }, error = function(e) e)
+  if (inherits(res, "condition")) {
+    return(.vIssue("load_all", "error", pkg,
+                   paste0("load_all failed: ", conditionMessage(res)),
+                   "fix the package so it loads (syntax / dependency error above)"))
+  }
+  .vIssues0()
+}
+
 #' Validate a model (and optionally its vignette) into one terse result
 #'
 #' Runs the whole validation chain and returns a compact pass/fix object
@@ -172,16 +198,19 @@
 #'
 #' @param model An `rxUi`, a model function, or an `nlmixr2lib` model name.
 #' @param paper Optional paper text or path; enables the source-trace stage.
-#' @param level `"fast"` (parse + conventions + source-trace) or `"full"`
-#'   (adds R CMD check and vignette render).
-#' @param pkg Package directory for the full-tier R CMD check.
+#' @param level `"fast"` (parse + conventions + source-trace), `"model"` (adds a
+#'   one-session `load_all` of `pkg` + the model's vignette render -- the
+#'   per-iteration combined gate, *no* whole-package check), or `"full"` (adds a
+#'   whole-package R CMD check + render; the pre-commit gate).
+#' @param pkg Package directory: `load_all`-ed for the `model` tier, R-CMD-checked
+#'   for the `full` tier.
 #' @param vignette Optional path to the model's validation vignette to render.
 #' @param tol Relative tolerance for source-trace numeric matches.
 #' @return An `nli_validation` object: `status` (`"success"`/`"issues"`),
 #'   `issues` (data frame), `counts`, and the `stages` run.
 #' @export
 validate_model <- function(model, paper = NULL,
-                           level = c("fast", "full"),
+                           level = c("fast", "full", "model"),
                            pkg = NULL, vignette = NULL, tol = 0.05) {
   level <- match.arg(level)
   issues <- .vIssues0()
@@ -203,11 +232,21 @@ validate_model <- function(model, paper = NULL,
     issues <- rbind(issues, .vSourceTrace(ui, paper, tol))
   }
 
+  # full: whole-package R CMD check (heavy) + render -- the pre-commit gate.
+  # model: load_all the worktree once, then render the model's vignette -- the
+  #   per-iteration combined gate (conventions + source-trace + render in one
+  #   call), deliberately WITHOUT the whole-package check that makes the full
+  #   tier re-run everything on every fix iteration.
   if (level == "full") {
     if (!is.null(pkg)) {
       stages <- c(stages, "check")
       issues <- rbind(issues, .vCheck(pkg))
     }
+    stages <- c(stages, "render")
+    issues <- rbind(issues, .vRender(vignette))
+  } else if (level == "model") {
+    stages <- c(stages, "load_all")
+    issues <- rbind(issues, .vLoadAll(pkg))
     stages <- c(stages, "render")
     issues <- rbind(issues, .vRender(vignette))
   }

@@ -56,11 +56,21 @@ API — but never reimplements model **validation**, which stays in
   runner's per-run token/cost records.
 - **Distillation** — `distill_paper()` produces an advisory structured
   extraction sheet via a local LLM (LLM-optional; `NULL` with no backend).
-- **Unified validation** — `validate_model()` runs the whole chain (parse →
-  `checkModelConventions()` → `source_trace()`, plus optional R CMD check and a
-  filtered vignette render) and returns one terse *Success / fix-list* instead of
-  the multi-thousand-line logs that otherwise re-cache every turn. CLI:
-  `inst/scripts/validate.R` (exit 0 = success, 1 = issues).
+- **Unified validation** — `validate_model()` runs the whole chain and returns
+  one terse *Success / fix-list* instead of the multi-thousand-line logs that
+  otherwise re-cache every turn. Three tiers: `fast` (parse →
+  `checkModelConventions()` → `source_trace()`), `model` (adds a one-session
+  `load_all` + the model's vignette render — the **per-iteration combined gate**,
+  deliberately *without* the whole-package check), and `full` (adds the
+  whole-package R CMD check — the pre-commit gate). CLI: `inst/scripts/validate.R`
+  (`--model` / `--full`; exit 0 = success, 1 = issues).
+- **Vignette pre-lint** — `lint_vignette()` statically scans a validation
+  vignette for the common render-killers (a `cmt =` referencing an algebraic
+  observable, a named-vector character subscript to `amt =`, a PKNCA
+  `time = 0`-dropping filter, a simulated cohort over the per-arm cap) *before*
+  the expensive render, so they are fixed without a render round-trip.
+  High-precision (numeric `amt` subscripts and non-PKNCA filters are not flagged);
+  a prior, not a gate. CLI: `inst/scripts/lint_vignette.R`.
 - **Naming pre-brief** — `naming_prebrief()` resolves a paper's covariates (and
   optionally parameters/compartments) to canonical names *once*, up front, so the
   agent ingests one small report instead of loading the ~136k-token register or
@@ -84,12 +94,13 @@ classification falls back to keyword matching.
 
 ## Status
 
-Phases 0–3 plus the three input-side levers above (unified validation, naming
-pre-brief, sidecar policy responder) are implemented and tested (`devtools::check`
-clean). The remaining work is integration — wiring `naming_prebrief()` /
-`lookup_canonical()`, `validate_model()` / `rcheck.sh`, and `source_trace()` into
-the `extract-literature-model` skill; the fittable classifier into the runner's
-pre-dispatch hook; and `sidecar_respond.R` into the runner's sidecar watcher.
+Phases 0–3 plus the input-side levers above are implemented and tested
+(`devtools::check` clean). The `extract-literature-model` skill now wires in
+`naming_prebrief()`, the `source_trace()` pre-check, the combined
+`validate_model(level = "model")` gate, and `lint_vignette()` (staged in a
+nlmixr2lib PR). The remaining integration is the fittable classifier into the
+runner's pre-dispatch hook, and `sidecar_respond.R` into the runner's sidecar
+watcher.
 
 ## Design
 

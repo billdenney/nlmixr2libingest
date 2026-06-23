@@ -14,13 +14,19 @@
 
 .stAsUi <- function(model) {
   if (inherits(model, "rxUi")) return(model)
+  if (is.function(model)) return(rxode2::rxode2(model))
   if (!requireNamespace("rxode2", quietly = TRUE)) {
     cli::cli_abort("Package {.pkg rxode2} is required to parse the model.")
   }
+  # A bare name (no model-code syntax) is resolved via readModelDb() -- the
+  # authoritative resolver -- rather than membership in `modeldb$name`, which
+  # can be stale relative to the installed model files. Only fall through to
+  # parsing the string as model code when it isn't a resolvable library name.
   if (is.character(model) && length(model) == 1L &&
-      requireNamespace("nlmixr2lib", quietly = TRUE) &&
-      model %in% nlmixr2lib::modeldb$name) {
-    return(rxode2::rxode2(nlmixr2lib::readModelDb(model)))
+      !grepl("[\n;~]|<-|d/dt|=", model) &&
+      requireNamespace("nlmixr2lib", quietly = TRUE)) {
+    fn <- tryCatch(nlmixr2lib::readModelDb(model), error = function(e) NULL)
+    if (!is.null(fn)) return(rxode2::rxode2(fn))
   }
   rxode2::rxode2(model)
 }
