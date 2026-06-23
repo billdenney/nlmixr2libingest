@@ -24,6 +24,7 @@ Imports:
     cli,
     DBI,
     duckdb,
+    jsonlite,
     stats,
     tools,
     utils
@@ -34,7 +35,8 @@ Suggests:
     rmarkdown,
     rxode2,
     testthat (>= 3.0.0),
-    withr
+    withr,
+    yaml
 Config/testthat/edition: 3
 URL: https://github.com/nlmixr2/nlmixr2libingest
 BugReports: https://github.com/nlmixr2/nlmixr2libingest/issues
