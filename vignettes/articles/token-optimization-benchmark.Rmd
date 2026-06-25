@@ -44,6 +44,13 @@ output tokens — alongside total tokens and the runner's dollar estimate.
   - `baseline_48h+` — the 50 most-recent tasks completed **more than 48 h**
     before the snapshot that carry a deliverable report (so they are
     classifiable). This is **before** the policy self-check.
+  - `preopt_pre0622` — **all** tasks completed **before 2026-06-22** (n ≈ 1565),
+    i.e. **before Phase 0** (register-lookup + R-log-filter). These predate the
+    deliverable-report convention, so they cannot be split extraction-vs-skip;
+    they are reported **overall (dollar + tokens) only**. Cost is reliable here —
+    **100%** of these records carry a populated `cost_usd` (vs gaps in the
+    report-era cohorts) — and the cohort is **extraction-dominated** (≈76% have
+    >12k output tokens).
 - **Outcome classifier.** Report-based: a task is a `no_extraction` skip if its
   `reports/<task>.md` deliverable contains skip language (e.g. "NOT a fittable
   model", "(skip)", "methodology paper", "conference poster ... not"); otherwise
@@ -59,9 +66,11 @@ if (has_kable) knitr::kable(tab, caption = "Task counts by cohort and outcome")
 > the register-lookup (`lookup_canonical`) and R-log-filter optimizations landed
 > 2026-06-22, so *both* cohorts already have them. The cohort difference is
 > therefore mainly the **policy self-check**, which targets *sidecar frequency*,
-> not per-task tokens. Measuring the Phase-0 token optimizations would need a
-> pre-2026-06-22 baseline — unavailable here because older tasks lack the
-> deliverable reports the classifier needs.
+> not per-task tokens. To reach **before** Phase 0 we add the `preopt_pre0622`
+> cohort — but only at the **dollar/overall** level (it cannot be split
+> extraction-vs-skip), and its task *composition* differs from the report-era
+> cohorts, so cross-era comparison is confounded (see the dollar-baseline
+> section).
 
 ## Results
 
@@ -108,6 +117,44 @@ if (has_kable) knitr::kable(build("no_extraction"),
   caption = "No-extraction (skip) tasks — mean / sd / median / p25 / p75")
 ```
 
+### Pre-Phase-0 dollar baseline (before 2026-06-22)
+
+These tasks predate the report convention, so they are reported **overall** (no
+extraction/skip split). The estimated dollar cost is the requested baseline.
+
+```{r preopt}
+ov <- function(co, m) {
+  x <- d[d$cohort == co, m]; x <- x[is.finite(x)]
+  c(n = length(x), mean = mean(x), sd = if (length(x) > 1) sd(x) else 0,
+    median = median(x), p25 = unname(quantile(x, .25)), p75 = unname(quantile(x, .75)))
+}
+eras <- c(preopt_pre0622 = "pre-Phase-0 (<06-22)",
+          `baseline_48h+` = "baseline (06-22..23)",
+          recent_24h = "recent (post-policy)")
+ctab <- do.call(rbind, lapply(names(eras), function(co) {
+  c1 <- ov(co, "cost"); t1 <- ov(co, "total")
+  data.frame(era = eras[co], n = c1["n"],
+             mean = sprintf("$%.2f", c1["mean"]), sd = sprintf("$%.2f", c1["sd"]),
+             median = sprintf("$%.2f", c1["median"]), p25 = sprintf("$%.2f", c1["p25"]),
+             p75 = sprintf("$%.2f", c1["p75"]),
+             `tok median` = sprintf("%.0fk", t1["median"] / 1000),
+             row.names = NULL, check.names = FALSE)
+}))
+if (has_kable) knitr::kable(ctab,
+  caption = "Overall per-task COST (USD) & token median by era — UNCLASSIFIED (mixes extraction + skip; composition differs across eras)")
+```
+
+> **Composition warning — do not read the overall drop as savings.** The eras
+> differ in task *mix*: pre-Phase-0 is extraction-dominated (older popPK papers),
+> while the two report-era cohorts are skip-dominated (the Metrum/vendor index
+> batch). So the overall fall from a ~\$3 median to ~\$0.8 is mostly the cheaper
+> skip mix, **not** an optimization effect. The only within-class read available
+> — pre-Phase-0 overall (≈extraction-dominated, median ~\$3.2) vs the report-era
+> *extraction* medians (\$7.5 recent / \$15 baseline) — runs the *other* way; but
+> those post-extractions are more complex Metrum models (TMDD, survival,
+> multi-analyte), so model difficulty confounds that read too. Net: **no clean
+> dollar evidence either way** — the cross-era signal is composition, not tooling.
+
 ## Interpretation
 
 1. **Skips — the bulk of both cohorts (`r sum(d$cls=="no_extraction")` of
@@ -153,10 +200,13 @@ if (has_kable) knitr::kable(build("no_extraction"),
 ## Conclusion
 
 In this window the policy optimizations did **not** reduce per-task tokens — and
-they were not expected to; their value is fewer sidecars. The per-task token
-optimizations (Phase 0) cannot be isolated here because both cohorts already
-carry them and no classifiable pre-Phase-0 baseline exists. **This snapshot is
-therefore best used as the baseline** against which future Phase 1–3 work
+they were not expected to; their value is fewer sidecars. Reaching back to a
+**pre-Phase-0 dollar baseline** (median ≈\$3.2/task overall, extraction-dominated)
+does not change the verdict: the cross-era cost signal is dominated by task
+*composition* (extraction-heavy → skip-heavy) and *difficulty* (post-era Metrum
+models are more complex), not by tooling, so there is **no clean dollar evidence
+of per-task savings** in either direction. **This snapshot is therefore best used
+as the baseline** against which future Phase 1–3 work
 (archetype templates, distillation, budget escalation) should be A/B-measured —
 ideally with a per-task `POLICY_SELFCHECK` / optimization marker so the
 extraction-vs-skip split and the optimization cohort are recorded at the source
