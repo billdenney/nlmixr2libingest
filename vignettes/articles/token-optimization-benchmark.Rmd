@@ -155,6 +155,57 @@ if (has_kable) knitr::kable(ctab,
 > multi-analyte), so model difficulty confounds that read too. Net: **no clean
 > dollar evidence either way** — the cross-era signal is composition, not tooling.
 
+## Controlling for model complexity (archetype-matched)
+
+The dollar gap above is partly *what kind of model* each era extracted. To remove
+that, we classify every extraction's model into a structural archetype
+(compartment count, elimination type, PD/TMDD/TTE structure) and compare cost
+**within** archetype across eras. Pre-era extractions are read from the merged
+registry; post-era extractions are isolated from their task worktrees (the new
+`inst/modeldb` file vs `origin/main`).
+
+> The `nlmixr2libingest` classifier (`build_feature_table()` /
+> `assign_archetype()`) is the intended tool, but currently errors against the
+> installed `nlmixr2lib` (`modeldb` not exported), so a deterministic structural
+> parse stands in here. Fixing the package classifier is tracked separately.
+
+```{r archetypes}
+fa <- system.file("extdata", "token_optimization_archetypes_2026-06-25.csv", package = "nlmixr2libingest")
+if (!nzchar(fa)) fa <- "../../inst/extdata/token_optimization_archetypes_2026-06-25.csv"
+a <- read.csv(fa, stringsAsFactors = FALSE)
+a$era <- factor(a$era, levels = c("pre0622", "baseline", "recent"),
+                labels = c("pre-Phase-0", "baseline", "recent"))
+agg <- do.call(rbind, lapply(split(a, list(a$archetype, a$era), drop = TRUE), function(g) {
+  data.frame(archetype = g$archetype[1], era = as.character(g$era[1]), n = nrow(g),
+             median = sprintf("$%.2f", median(g$cost)),
+             p25 = sprintf("$%.2f", quantile(g$cost, .25)),
+             p75 = sprintf("$%.2f", quantile(g$cost, .75)), row.names = NULL)
+}))
+agg <- agg[order(agg$archetype, agg$era), ]
+if (has_kable) knitr::kable(agg, row.names = FALSE,
+  caption = "Per-task cost (USD) by model archetype and era — extraction tasks only")
+```
+
+**What it shows.**
+
+- **Complexity dominates cost.** In the pre-Phase-0 corpus, simple linear PK runs
+  ~\$9–10 median, while TMDD, indirect-response / Emax PD and TTE/survival run
+  \$13–17 — a 1.5–2× premium. That quantifies the difficulty confound behind the
+  overall numbers.
+- **Like-for-like, no per-task saving.** The cleanest comparison —
+  **simple linear PK**, well-populated in every era — is **flat**: ~\$9.3
+  (pre-Phase-0) vs ~\$8.6–9.5 (recent). Pre-Phase-0 here is genuinely *before* the
+  register-lookup / R-log-filter tools, so this is the Phase-0-inclusive
+  comparison the overall section could not make — and it is flat.
+- **Complex archetypes read *more* expensive post**, not less (TMDD ~\$20 vs ~\$8;
+  TTE ~\$25 vs ~\$14), but each post cell holds only 1–6 tasks and the post
+  (Metrum-index) instances are atypically hard *within* an archetype (e.g.
+  meta-analytic survival) — noise plus residual difficulty, not a regression.
+
+**Bottom line:** complexity-matching confirms the dollar verdict — no per-task
+cost reduction is visible from the token optimizations, even against a true
+pre-Phase-0 baseline. The realized win remains sidecar reduction.
+
 ## Interpretation
 
 1. **Skips — the bulk of both cohorts (`r sum(d$cls=="no_extraction")` of
