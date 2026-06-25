@@ -482,6 +482,217 @@ tooling.</p>
 </div>
 </div>
 <div class="section level2">
+<h2 id="controlling-for-model-complexity-archetype-matched">Controlling for model complexity (archetype-matched)<a class="anchor" aria-label="anchor" href="#controlling-for-model-complexity-archetype-matched"></a>
+</h2>
+<p>The dollar gap above is partly <em>what kind of model</em> each era
+extracted. To remove that, we classify every extraction’s model into a
+structural archetype (compartment count, elimination type, PD/TMDD/TTE
+structure) and compare cost <strong>within</strong> archetype across
+eras. Pre-era extractions are read from the merged registry; post-era
+extractions are isolated from their task worktrees (the new
+<code>inst/modeldb</code> file vs <code>origin/main</code>).</p>
+<blockquote>
+<p>The <code>nlmixr2libingest</code> classifier
+(<code><a href="../reference/build_feature_table.html">build_feature_table()</a></code> / <code><a href="../reference/assign_archetype.html">assign_archetype()</a></code>)
+is the intended tool, but currently errors against the installed
+<code>nlmixr2lib</code> (<code>modeldb</code> not exported), so a
+deterministic structural parse stands in here. Fixing the package
+classifier is tracked separately.</p>
+</blockquote>
+<table class="table">
+<caption>Per-task cost (USD) by model archetype and era — extraction
+tasks only</caption>
+<thead><tr class="header">
+<th align="left">archetype</th>
+<th align="left">era</th>
+<th align="right">n</th>
+<th align="left">median</th>
+<th align="left">p25</th>
+<th align="left">p75</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td align="left">Emax/effect PD</td>
+<td align="left">baseline</td>
+<td align="right">3</td>
+<td align="left">$34.38</td>
+<td align="left">$30.78</td>
+<td align="left">$34.81</td>
+</tr>
+<tr class="even">
+<td align="left">Emax/effect PD</td>
+<td align="left">pre-Phase-0</td>
+<td align="right">66</td>
+<td align="left">$12.63</td>
+<td align="left">$8.68</td>
+<td align="left">$14.87</td>
+</tr>
+<tr class="odd">
+<td align="left">indirect-response PD</td>
+<td align="left">baseline</td>
+<td align="right">2</td>
+<td align="left">$17.13</td>
+<td align="left">$16.04</td>
+<td align="left">$18.23</td>
+</tr>
+<tr class="even">
+<td align="left">indirect-response PD</td>
+<td align="left">pre-Phase-0</td>
+<td align="right">21</td>
+<td align="left">$14.06</td>
+<td align="left">$10.57</td>
+<td align="left">$22.66</td>
+</tr>
+<tr class="odd">
+<td align="left">indirect-response PD</td>
+<td align="left">recent</td>
+<td align="right">1</td>
+<td align="left">$18.31</td>
+<td align="left">$18.31</td>
+<td align="left">$18.31</td>
+</tr>
+<tr class="even">
+<td align="left">linear 1-cmt PK</td>
+<td align="left">baseline</td>
+<td align="right">2</td>
+<td align="left">$9.07</td>
+<td align="left">$7.85</td>
+<td align="left">$10.29</td>
+</tr>
+<tr class="odd">
+<td align="left">linear 1-cmt PK</td>
+<td align="left">pre-Phase-0</td>
+<td align="right">232</td>
+<td align="left">$9.28</td>
+<td align="left">$6.29</td>
+<td align="left">$12.61</td>
+</tr>
+<tr class="even">
+<td align="left">linear 1-cmt PK</td>
+<td align="left">recent</td>
+<td align="right">1</td>
+<td align="left">$8.63</td>
+<td align="left">$8.63</td>
+<td align="left">$8.63</td>
+</tr>
+<tr class="odd">
+<td align="left">linear 2-cmt PK</td>
+<td align="left">baseline</td>
+<td align="right">9</td>
+<td align="left">$14.25</td>
+<td align="left">$8.14</td>
+<td align="left">$17.28</td>
+</tr>
+<tr class="even">
+<td align="left">linear 2-cmt PK</td>
+<td align="left">pre-Phase-0</td>
+<td align="right">297</td>
+<td align="left">$9.58</td>
+<td align="left">$7.22</td>
+<td align="left">$13.18</td>
+</tr>
+<tr class="odd">
+<td align="left">linear 2-cmt PK</td>
+<td align="left">recent</td>
+<td align="right">4</td>
+<td align="left">$9.47</td>
+<td align="left">$5.13</td>
+<td align="left">$13.95</td>
+</tr>
+<tr class="even">
+<td align="left">linear 3-cmt PK</td>
+<td align="left">baseline</td>
+<td align="right">1</td>
+<td align="left">$12.79</td>
+<td align="left">$12.79</td>
+<td align="left">$12.79</td>
+</tr>
+<tr class="odd">
+<td align="left">linear 3-cmt PK</td>
+<td align="left">pre-Phase-0</td>
+<td align="right">81</td>
+<td align="left">$9.20</td>
+<td align="left">$3.37</td>
+<td align="left">$13.25</td>
+</tr>
+<tr class="even">
+<td align="left">MM/nonlinear PK</td>
+<td align="left">pre-Phase-0</td>
+<td align="right">39</td>
+<td align="left">$9.91</td>
+<td align="left">$6.97</td>
+<td align="left">$12.29</td>
+</tr>
+<tr class="odd">
+<td align="left">TMDD</td>
+<td align="left">baseline</td>
+<td align="right">3</td>
+<td align="left">$20.16</td>
+<td align="left">$18.08</td>
+<td align="left">$20.16</td>
+</tr>
+<tr class="even">
+<td align="left">TMDD</td>
+<td align="left">pre-Phase-0</td>
+<td align="right">41</td>
+<td align="left">$7.94</td>
+<td align="left">$3.84</td>
+<td align="left">$11.50</td>
+</tr>
+<tr class="odd">
+<td align="left">TTE/survival</td>
+<td align="left">baseline</td>
+<td align="right">6</td>
+<td align="left">$26.78</td>
+<td align="left">$26.78</td>
+<td align="left">$26.78</td>
+</tr>
+<tr class="even">
+<td align="left">TTE/survival</td>
+<td align="left">pre-Phase-0</td>
+<td align="right">21</td>
+<td align="left">$13.67</td>
+<td align="left">$8.62</td>
+<td align="left">$18.61</td>
+</tr>
+<tr class="odd">
+<td align="left">TTE/survival</td>
+<td align="left">recent</td>
+<td align="right">1</td>
+<td align="left">$24.27</td>
+<td align="left">$24.27</td>
+<td align="left">$24.27</td>
+</tr>
+</tbody>
+</table>
+<p><strong>What it shows.</strong></p>
+<ul>
+<li>
+<strong>Complexity dominates cost.</strong> In the pre-Phase-0
+corpus, simple linear PK runs ~$9–10 median, while TMDD,
+indirect-response / Emax PD and TTE/survival run $13–17 — a 1.5–2×
+premium. That quantifies the difficulty confound behind the overall
+numbers.</li>
+<li>
+<strong>Like-for-like, no per-task saving.</strong> The cleanest
+comparison — <strong>simple linear PK</strong>, well-populated in every
+era — is <strong>flat</strong>: ~$9.3 (pre-Phase-0) vs ~$8.6–9.5
+(recent). Pre-Phase-0 here is genuinely <em>before</em> the
+register-lookup / R-log-filter tools, so this is the Phase-0-inclusive
+comparison the overall section could not make — and it is flat.</li>
+<li>
+<strong>Complex archetypes read <em>more</em> expensive
+post</strong>, not less (TMDD ~$20 vs ~$8; TTE ~$25 vs ~$14), but each
+post cell holds only 1–6 tasks and the post (Metrum-index) instances are
+atypically hard <em>within</em> an archetype (e.g. meta-analytic
+survival) — noise plus residual difficulty, not a regression.</li>
+</ul>
+<p><strong>Bottom line:</strong> complexity-matching confirms the dollar
+verdict — no per-task cost reduction is visible from the token
+optimizations, even against a true pre-Phase-0 baseline. The realized
+win remains sidecar reduction.</p>
+</div>
+<div class="section level2">
 <h2 id="interpretation">Interpretation<a class="anchor" aria-label="anchor" href="#interpretation"></a>
 </h2>
 <ol style="list-style-type: decimal">

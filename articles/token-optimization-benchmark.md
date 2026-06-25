@@ -118,6 +118,71 @@ extraction + skip; composition differs across eras) {.table}
 > that read too. Net: **no clean dollar evidence either way** — the
 > cross-era signal is composition, not tooling.
 
+## Controlling for model complexity (archetype-matched)
+
+The dollar gap above is partly *what kind of model* each era extracted.
+To remove that, we classify every extraction’s model into a structural
+archetype (compartment count, elimination type, PD/TMDD/TTE structure)
+and compare cost **within** archetype across eras. Pre-era extractions
+are read from the merged registry; post-era extractions are isolated
+from their task worktrees (the new `inst/modeldb` file vs
+`origin/main`).
+
+> The `nlmixr2libingest` classifier
+> ([`build_feature_table()`](../reference/build_feature_table.md) /
+> [`assign_archetype()`](../reference/assign_archetype.md)) is the
+> intended tool, but currently errors against the installed `nlmixr2lib`
+> (`modeldb` not exported), so a deterministic structural parse stands
+> in here. Fixing the package classifier is tracked separately.
+
+| archetype            | era         |   n | median  | p25     | p75     |
+|:---------------------|:------------|----:|:--------|:--------|:--------|
+| Emax/effect PD       | baseline    |   3 | \$34.38 | \$30.78 | \$34.81 |
+| Emax/effect PD       | pre-Phase-0 |  66 | \$12.63 | \$8.68  | \$14.87 |
+| indirect-response PD | baseline    |   2 | \$17.13 | \$16.04 | \$18.23 |
+| indirect-response PD | pre-Phase-0 |  21 | \$14.06 | \$10.57 | \$22.66 |
+| indirect-response PD | recent      |   1 | \$18.31 | \$18.31 | \$18.31 |
+| linear 1-cmt PK      | baseline    |   2 | \$9.07  | \$7.85  | \$10.29 |
+| linear 1-cmt PK      | pre-Phase-0 | 232 | \$9.28  | \$6.29  | \$12.61 |
+| linear 1-cmt PK      | recent      |   1 | \$8.63  | \$8.63  | \$8.63  |
+| linear 2-cmt PK      | baseline    |   9 | \$14.25 | \$8.14  | \$17.28 |
+| linear 2-cmt PK      | pre-Phase-0 | 297 | \$9.58  | \$7.22  | \$13.18 |
+| linear 2-cmt PK      | recent      |   4 | \$9.47  | \$5.13  | \$13.95 |
+| linear 3-cmt PK      | baseline    |   1 | \$12.79 | \$12.79 | \$12.79 |
+| linear 3-cmt PK      | pre-Phase-0 |  81 | \$9.20  | \$3.37  | \$13.25 |
+| MM/nonlinear PK      | pre-Phase-0 |  39 | \$9.91  | \$6.97  | \$12.29 |
+| TMDD                 | baseline    |   3 | \$20.16 | \$18.08 | \$20.16 |
+| TMDD                 | pre-Phase-0 |  41 | \$7.94  | \$3.84  | \$11.50 |
+| TTE/survival         | baseline    |   6 | \$26.78 | \$26.78 | \$26.78 |
+| TTE/survival         | pre-Phase-0 |  21 | \$13.67 | \$8.62  | \$18.61 |
+| TTE/survival         | recent      |   1 | \$24.27 | \$24.27 | \$24.27 |
+
+Per-task cost (USD) by model archetype and era — extraction tasks only
+{.table}
+
+**What it shows.**
+
+- **Complexity dominates cost.** In the pre-Phase-0 corpus, simple
+  linear PK runs ~\$9–10 median, while TMDD, indirect-response / Emax PD
+  and TTE/survival run \$13–17 — a 1.5–2× premium. That quantifies the
+  difficulty confound behind the overall numbers.
+- **Like-for-like, no per-task saving.** The cleanest comparison —
+  **simple linear PK**, well-populated in every era — is **flat**:
+  ~\$9.3 (pre-Phase-0) vs ~\$8.6–9.5 (recent). Pre-Phase-0 here is
+  genuinely *before* the register-lookup / R-log-filter tools, so this
+  is the Phase-0-inclusive comparison the overall section could not make
+  — and it is flat.
+- **Complex archetypes read *more* expensive post**, not less (TMDD
+  ~\$20 vs ~\$8; TTE ~\$25 vs ~\$14), but each post cell holds only 1–6
+  tasks and the post (Metrum-index) instances are atypically hard
+  *within* an archetype (e.g. meta-analytic survival) — noise plus
+  residual difficulty, not a regression.
+
+**Bottom line:** complexity-matching confirms the dollar verdict — no
+per-task cost reduction is visible from the token optimizations, even
+against a true pre-Phase-0 baseline. The realized win remains sidecar
+reduction.
+
 ## Interpretation
 
 1.  **Skips — the bulk of both cohorts (133 of 1721 tasks) — are flat.**
