@@ -1,0 +1,832 @@
+archetype,era,cost,source
+linear 2-cmt PK,pre0622,15.3953,registry
+linear 2-cmt PK,pre0622,1.4895,registry
+linear 2-cmt PK,pre0622,10.0753,registry
+linear 2-cmt PK,pre0622,0.9821,registry
+linear 1-cmt PK,pre0622,7.3507,registry
+linear 1-cmt PK,pre0622,0.9296,registry
+linear 1-cmt PK,pre0622,13.8083,registry
+linear 2-cmt PK,pre0622,22.6645,registry
+linear 2-cmt PK,pre0622,12.0039,registry
+linear 2-cmt PK,pre0622,1.8683,registry
+linear 2-cmt PK,pre0622,9.3772,registry
+linear 2-cmt PK,pre0622,2.1606,registry
+linear 2-cmt PK,pre0622,2.0495,registry
+linear 2-cmt PK,pre0622,1.1541,registry
+linear 2-cmt PK,pre0622,22.5364,registry
+linear 2-cmt PK,pre0622,9.3497,registry
+linear 1-cmt PK,pre0622,9.7146,registry
+linear 1-cmt PK,pre0622,12.506,registry
+TTE/survival,pre0622,8.6201,registry
+linear 2-cmt PK,pre0622,12.4927,registry
+linear 1-cmt PK,pre0622,12.2478,registry
+TMDD,pre0622,21.3118,registry
+linear 3-cmt PK,pre0622,10.5415,registry
+linear 3-cmt PK,pre0622,14.0367,registry
+linear 1-cmt PK,pre0622,6.668,registry
+linear 2-cmt PK,pre0622,7.1351,registry
+linear 1-cmt PK,pre0622,11.3257,registry
+linear 2-cmt PK,pre0622,14.6939,registry
+Emax/effect PD,pre0622,9.1555,registry
+linear 2-cmt PK,pre0622,2.0018,registry
+linear 2-cmt PK,pre0622,8.391,registry
+TTE/survival,pre0622,7.3423,registry
+linear 1-cmt PK,pre0622,15.4492,registry
+linear 2-cmt PK,pre0622,17.5886,registry
+linear 2-cmt PK,pre0622,16.1471,registry
+linear 2-cmt PK,pre0622,9.2448,registry
+linear 2-cmt PK,pre0622,12.0637,registry
+indirect-response PD,pre0622,13.3071,registry
+linear 1-cmt PK,pre0622,11.59,registry
+linear 1-cmt PK,pre0622,9.4059,registry
+linear 2-cmt PK,pre0622,6.4303,registry
+TMDD,pre0622,3.8367,registry
+TMDD,pre0622,1.1553,registry
+TMDD,pre0622,7.5147,registry
+TMDD,pre0622,9.5468,registry
+linear 3-cmt PK,pre0622,16.2265,registry
+linear 3-cmt PK,pre0622,1.8418,registry
+linear 1-cmt PK,pre0622,3.2062,registry
+linear 1-cmt PK,pre0622,15.22,registry
+linear 2-cmt PK,pre0622,9.9674,registry
+linear 2-cmt PK,pre0622,7.3071,registry
+linear 2-cmt PK,pre0622,7.4367,registry
+TTE/survival,pre0622,19.7874,registry
+linear 2-cmt PK,pre0622,12.4779,registry
+linear 1-cmt PK,pre0622,8.6952,registry
+MM/nonlinear PK,pre0622,2.0049,registry
+linear 2-cmt PK,pre0622,15.3615,registry
+linear 2-cmt PK,pre0622,9.6003,registry
+linear 2-cmt PK,pre0622,13.8115,registry
+linear 2-cmt PK,pre0622,8.7835,registry
+linear 1-cmt PK,pre0622,5.2032,registry
+linear 3-cmt PK,pre0622,18.7182,registry
+linear 2-cmt PK,pre0622,12.549,registry
+linear 1-cmt PK,pre0622,8.6918,registry
+linear 3-cmt PK,pre0622,10.8847,registry
+TTE/survival,pre0622,31.2429,registry
+TMDD,pre0622,1.4513,registry
+MM/nonlinear PK,pre0622,11.6455,registry
+linear 3-cmt PK,pre0622,13.0153,registry
+linear 2-cmt PK,pre0622,7.1822,registry
+MM/nonlinear PK,pre0622,3.8836,registry
+MM/nonlinear PK,pre0622,1.4821,registry
+MM/nonlinear PK,pre0622,25.6763,registry
+MM/nonlinear PK,pre0622,0.9581,registry
+linear 3-cmt PK,pre0622,12.6068,registry
+linear 2-cmt PK,pre0622,15.834,registry
+linear 2-cmt PK,pre0622,15.7027,registry
+linear 1-cmt PK,pre0622,12.9082,registry
+linear 1-cmt PK,pre0622,0.7328,registry
+linear 2-cmt PK,pre0622,11.8481,registry
+MM/nonlinear PK,pre0622,8.6459,registry
+linear 3-cmt PK,pre0622,2.5158,registry
+linear 3-cmt PK,pre0622,7.274,registry
+linear 3-cmt PK,pre0622,8.5518,registry
+linear 1-cmt PK,pre0622,10.0582,registry
+Emax/effect PD,pre0622,9.6328,registry
+linear 1-cmt PK,pre0622,3.0222,registry
+linear 1-cmt PK,pre0622,10.918,registry
+linear 2-cmt PK,pre0622,15.1196,registry
+linear 2-cmt PK,pre0622,7.6239,registry
+linear 2-cmt PK,pre0622,8.2138,registry
+linear 1-cmt PK,pre0622,6.2556,registry
+linear 2-cmt PK,pre0622,5.1795,registry
+linear 2-cmt PK,pre0622,9.2679,registry
+linear 2-cmt PK,pre0622,4.6705,registry
+linear 2-cmt PK,pre0622,4.6867,registry
+linear 2-cmt PK,pre0622,8.5188,registry
+linear 1-cmt PK,pre0622,16.1471,registry
+linear 1-cmt PK,pre0622,9.2448,registry
+linear 3-cmt PK,pre0622,9.6619,registry
+linear 1-cmt PK,pre0622,1.8615,registry
+linear 1-cmt PK,pre0622,9.0891,registry
+linear 2-cmt PK,pre0622,11.8276,registry
+linear 3-cmt PK,pre0622,11.2669,registry
+linear 1-cmt PK,pre0622,10.0576,registry
+indirect-response PD,pre0622,11.2404,registry
+linear 1-cmt PK,pre0622,5.4094,registry
+linear 1-cmt PK,pre0622,8.5204,registry
+linear 1-cmt PK,pre0622,15.7027,registry
+linear 1-cmt PK,pre0622,19.0466,registry
+linear 1-cmt PK,pre0622,1.7421,registry
+linear 1-cmt PK,pre0622,7.2299,registry
+linear 2-cmt PK,pre0622,12.6307,registry
+Emax/effect PD,pre0622,9.5348,registry
+linear 2-cmt PK,pre0622,21.3118,registry
+linear 2-cmt PK,pre0622,5.8308,registry
+MM/nonlinear PK,pre0622,1.687,registry
+linear 1-cmt PK,pre0622,9.6311,registry
+Emax/effect PD,pre0622,6.8443,registry
+MM/nonlinear PK,pre0622,11.4294,registry
+linear 2-cmt PK,pre0622,6.8802,registry
+linear 2-cmt PK,pre0622,9.7859,registry
+linear 1-cmt PK,pre0622,9.8021,registry
+linear 1-cmt PK,pre0622,6.959,registry
+linear 3-cmt PK,pre0622,8.6841,registry
+linear 2-cmt PK,pre0622,25.6499,registry
+linear 2-cmt PK,pre0622,2.5214,registry
+linear 2-cmt PK,pre0622,1.3829,registry
+linear 1-cmt PK,pre0622,16.5618,registry
+Emax/effect PD,pre0622,21.6062,registry
+MM/nonlinear PK,pre0622,7.6561,registry
+linear 2-cmt PK,pre0622,8.4277,registry
+linear 2-cmt PK,pre0622,14.062,registry
+indirect-response PD,pre0622,14.062,registry
+linear 2-cmt PK,pre0622,2.4393,registry
+linear 2-cmt PK,pre0622,3.1795,registry
+linear 3-cmt PK,pre0622,8.4567,registry
+TMDD,pre0622,20.8474,registry
+linear 1-cmt PK,pre0622,14.1031,registry
+linear 2-cmt PK,pre0622,13.0294,registry
+linear 3-cmt PK,pre0622,12.3273,registry
+linear 3-cmt PK,pre0622,12.6395,registry
+linear 3-cmt PK,pre0622,12.1354,registry
+linear 1-cmt PK,pre0622,12.4592,registry
+linear 1-cmt PK,pre0622,9.6868,registry
+linear 1-cmt PK,pre0622,3.8518,registry
+linear 1-cmt PK,pre0622,0.7328,registry
+linear 1-cmt PK,pre0622,6.2672,registry
+linear 1-cmt PK,pre0622,9.7265,registry
+linear 2-cmt PK,pre0622,6.1565,registry
+linear 2-cmt PK,pre0622,13.4725,registry
+Emax/effect PD,pre0622,1.3896,registry
+linear 2-cmt PK,pre0622,10.538,registry
+linear 2-cmt PK,pre0622,13.1828,registry
+linear 2-cmt PK,pre0622,8.1368,registry
+linear 2-cmt PK,pre0622,14.1429,registry
+linear 2-cmt PK,pre0622,17.9645,registry
+linear 2-cmt PK,pre0622,5.5966,registry
+linear 1-cmt PK,pre0622,5.7587,registry
+linear 1-cmt PK,pre0622,12.859,registry
+linear 1-cmt PK,pre0622,3.5857,registry
+linear 1-cmt PK,pre0622,10.4956,registry
+linear 2-cmt PK,pre0622,9.326,registry
+Emax/effect PD,pre0622,21.253,registry
+indirect-response PD,pre0622,14.1964,registry
+TMDD,pre0622,12.108,registry
+TMDD,pre0622,0.9512,registry
+linear 2-cmt PK,pre0622,14.062,registry
+linear 2-cmt PK,pre0622,10.6656,registry
+linear 2-cmt PK,pre0622,7.4838,registry
+linear 3-cmt PK,pre0622,8.206,registry
+linear 1-cmt PK,pre0622,3.2786,registry
+linear 1-cmt PK,pre0622,16.9321,registry
+Emax/effect PD,pre0622,8.9723,registry
+linear 2-cmt PK,pre0622,7.2186,registry
+linear 1-cmt PK,pre0622,7.169,registry
+linear 2-cmt PK,pre0622,11.2308,registry
+linear 2-cmt PK,pre0622,25.0924,registry
+linear 2-cmt PK,pre0622,8.3076,registry
+Emax/effect PD,pre0622,6.4563,registry
+linear 2-cmt PK,pre0622,4.442,registry
+linear 2-cmt PK,pre0622,7.1324,registry
+linear 3-cmt PK,pre0622,6.8802,registry
+linear 3-cmt PK,pre0622,9.7859,registry
+linear 1-cmt PK,pre0622,10.4561,registry
+linear 2-cmt PK,pre0622,4.6234,registry
+linear 2-cmt PK,pre0622,6.1074,registry
+linear 3-cmt PK,pre0622,8.7131,registry
+linear 3-cmt PK,pre0622,20.5639,registry
+linear 2-cmt PK,pre0622,8.7835,registry
+indirect-response PD,pre0622,22.6645,registry
+linear 1-cmt PK,pre0622,9.6537,registry
+linear 3-cmt PK,pre0622,3.3675,registry
+MM/nonlinear PK,pre0622,12.3273,registry
+MM/nonlinear PK,pre0622,12.6395,registry
+MM/nonlinear PK,pre0622,12.1354,registry
+linear 1-cmt PK,pre0622,25.0728,registry
+linear 2-cmt PK,pre0622,15.07,registry
+linear 2-cmt PK,pre0622,19.1783,registry
+linear 3-cmt PK,pre0622,10.2283,registry
+linear 2-cmt PK,pre0622,1.2676,registry
+linear 1-cmt PK,pre0622,9.3477,registry
+linear 1-cmt PK,pre0622,1.4458,registry
+linear 1-cmt PK,pre0622,8.2574,registry
+linear 1-cmt PK,pre0622,12.4099,registry
+Emax/effect PD,pre0622,9.646,registry
+TMDD,pre0622,19.7445,registry
+linear 3-cmt PK,pre0622,3.2011,registry
+linear 2-cmt PK,pre0622,6.1106,registry
+linear 2-cmt PK,pre0622,5.7082,registry
+linear 2-cmt PK,pre0622,6.9273,registry
+Emax/effect PD,pre0622,14.8742,registry
+linear 1-cmt PK,pre0622,6.2217,registry
+linear 3-cmt PK,pre0622,15.9328,registry
+linear 2-cmt PK,pre0622,8.2629,registry
+linear 2-cmt PK,pre0622,7.3234,registry
+linear 2-cmt PK,pre0622,4.4725,registry
+MM/nonlinear PK,pre0622,1.4933,registry
+linear 2-cmt PK,pre0622,14.4485,registry
+TMDD,pre0622,1.746,registry
+TMDD,pre0622,11.5795,registry
+linear 1-cmt PK,pre0622,27.6152,registry
+linear 2-cmt PK,pre0622,8.6733,registry
+linear 2-cmt PK,pre0622,8.3519,registry
+linear 3-cmt PK,pre0622,6.9777,registry
+Emax/effect PD,pre0622,15.4119,registry
+linear 2-cmt PK,pre0622,13.0618,registry
+linear 2-cmt PK,pre0622,16.1835,registry
+linear 1-cmt PK,pre0622,9.0611,registry
+linear 2-cmt PK,pre0622,8.3076,registry
+linear 2-cmt PK,pre0622,1.8066,registry
+linear 1-cmt PK,pre0622,7.4505,registry
+linear 1-cmt PK,pre0622,18.3605,registry
+linear 2-cmt PK,pre0622,11.7156,registry
+linear 2-cmt PK,pre0622,13.6614,registry
+linear 1-cmt PK,pre0622,10.2005,registry
+linear 2-cmt PK,pre0622,5.5113,registry
+linear 2-cmt PK,pre0622,4.9657,registry
+linear 1-cmt PK,pre0622,15.7027,registry
+linear 2-cmt PK,pre0622,8.7582,registry
+Emax/effect PD,pre0622,14.8742,registry
+Emax/effect PD,pre0622,9.646,registry
+linear 1-cmt PK,pre0622,1.7312,registry
+Emax/effect PD,pre0622,13.9649,registry
+linear 1-cmt PK,pre0622,15.7027,registry
+linear 2-cmt PK,pre0622,9.1331,registry
+TMDD,pre0622,15.5768,registry
+TMDD,pre0622,13.8457,registry
+Emax/effect PD,pre0622,17.1465,registry
+linear 1-cmt PK,pre0622,8.9942,registry
+linear 1-cmt PK,pre0622,15.22,registry
+linear 2-cmt PK,pre0622,8.8823,registry
+linear 2-cmt PK,pre0622,5.2684,registry
+linear 3-cmt PK,pre0622,18.6985,registry
+linear 1-cmt PK,pre0622,10.4788,registry
+linear 3-cmt PK,pre0622,5.4322,registry
+linear 1-cmt PK,pre0622,15.1056,registry
+linear 1-cmt PK,pre0622,5.7962,registry
+MM/nonlinear PK,pre0622,4.2716,registry
+linear 2-cmt PK,pre0622,8.9345,registry
+linear 2-cmt PK,pre0622,13.6968,registry
+linear 2-cmt PK,pre0622,12.8122,registry
+linear 3-cmt PK,pre0622,9.2007,registry
+linear 3-cmt PK,pre0622,1.9822,registry
+linear 1-cmt PK,pre0622,13.7818,registry
+MM/nonlinear PK,pre0622,14.836,registry
+MM/nonlinear PK,pre0622,8.2139,registry
+linear 1-cmt PK,pre0622,16.2253,registry
+linear 2-cmt PK,pre0622,8.9277,registry
+linear 2-cmt PK,pre0622,14.7296,registry
+linear 2-cmt PK,pre0622,7.5371,registry
+linear 1-cmt PK,pre0622,7.7034,registry
+linear 2-cmt PK,pre0622,14.5943,registry
+linear 2-cmt PK,pre0622,10.5232,registry
+linear 3-cmt PK,pre0622,8.0615,registry
+linear 3-cmt PK,pre0622,2.743,registry
+linear 2-cmt PK,pre0622,5.7221,registry
+linear 1-cmt PK,pre0622,22.0769,registry
+linear 3-cmt PK,pre0622,1.8683,registry
+linear 3-cmt PK,pre0622,9.3772,registry
+linear 3-cmt PK,pre0622,2.1606,registry
+linear 3-cmt PK,pre0622,2.0495,registry
+linear 3-cmt PK,pre0622,1.1541,registry
+linear 2-cmt PK,pre0622,7.2804,registry
+linear 2-cmt PK,pre0622,9.4065,registry
+linear 3-cmt PK,pre0622,28.0655,registry
+linear 2-cmt PK,pre0622,9.3159,registry
+linear 2-cmt PK,pre0622,16.2048,registry
+linear 3-cmt PK,pre0622,11.1332,registry
+linear 1-cmt PK,pre0622,5.798,registry
+Emax/effect PD,pre0622,3.0157,registry
+indirect-response PD,pre0622,41.8656,registry
+TMDD,pre0622,4.2192,registry
+TTE/survival,pre0622,14.7119,registry
+TTE/survival,pre0622,16.1615,registry
+linear 2-cmt PK,pre0622,8.6459,registry
+linear 1-cmt PK,pre0622,2.5917,registry
+linear 1-cmt PK,pre0622,5.499,registry
+linear 1-cmt PK,pre0622,11.4178,registry
+linear 2-cmt PK,pre0622,20.4783,registry
+linear 2-cmt PK,pre0622,14.062,registry
+linear 2-cmt PK,pre0622,1.3494,registry
+linear 1-cmt PK,pre0622,9.5786,registry
+linear 3-cmt PK,pre0622,21.3118,registry
+linear 3-cmt PK,pre0622,3.0571,registry
+Emax/effect PD,pre0622,8.1922,registry
+linear 2-cmt PK,pre0622,13.8705,registry
+linear 2-cmt PK,pre0622,2.1194,registry
+linear 2-cmt PK,pre0622,6.0039,registry
+TTE/survival,pre0622,16.2941,registry
+linear 2-cmt PK,pre0622,13.5695,registry
+linear 1-cmt PK,pre0622,7.1953,registry
+linear 2-cmt PK,pre0622,15.3674,registry
+linear 2-cmt PK,pre0622,5.2577,registry
+linear 2-cmt PK,pre0622,14.062,registry
+linear 1-cmt PK,pre0622,7.8034,registry
+linear 2-cmt PK,pre0622,7.2804,registry
+linear 2-cmt PK,pre0622,6.6197,registry
+Emax/effect PD,pre0622,26.2124,registry
+indirect-response PD,pre0622,11.6169,registry
+linear 2-cmt PK,pre0622,2.1437,registry
+linear 1-cmt PK,pre0622,6.1106,registry
+linear 1-cmt PK,pre0622,5.7082,registry
+linear 1-cmt PK,pre0622,7.2494,registry
+linear 2-cmt PK,pre0622,10.355,registry
+Emax/effect PD,pre0622,15.3943,registry
+linear 1-cmt PK,pre0622,7.1567,registry
+linear 2-cmt PK,pre0622,7.801,registry
+linear 1-cmt PK,pre0622,5.5381,registry
+MM/nonlinear PK,pre0622,25.6477,registry
+linear 3-cmt PK,pre0622,24.3339,registry
+linear 2-cmt PK,pre0622,18.1081,registry
+linear 1-cmt PK,pre0622,8.5441,registry
+linear 2-cmt PK,pre0622,10.8084,registry
+linear 1-cmt PK,pre0622,7.8248,registry
+linear 1-cmt PK,pre0622,5.4322,registry
+Emax/effect PD,pre0622,13.9649,registry
+linear 2-cmt PK,pre0622,11.8276,registry
+linear 2-cmt PK,pre0622,8.2909,registry
+TMDD,pre0622,4.2514,registry
+linear 1-cmt PK,pre0622,4.6532,registry
+linear 2-cmt PK,pre0622,16.6503,registry
+linear 2-cmt PK,pre0622,7.9016,registry
+linear 2-cmt PK,pre0622,14.7016,registry
+Emax/effect PD,pre0622,11.5191,registry
+linear 2-cmt PK,pre0622,5.5113,registry
+linear 2-cmt PK,pre0622,4.9657,registry
+linear 1-cmt PK,pre0622,0.7125,registry
+linear 1-cmt PK,pre0622,8.6739,registry
+Emax/effect PD,pre0622,11.0905,registry
+linear 2-cmt PK,pre0622,14.4556,registry
+linear 1-cmt PK,pre0622,20.3362,registry
+linear 1-cmt PK,pre0622,7.7907,registry
+linear 2-cmt PK,pre0622,6.3885,registry
+linear 2-cmt PK,pre0622,6.2721,registry
+linear 1-cmt PK,pre0622,9.599,registry
+linear 1-cmt PK,pre0622,8.5562,registry
+TTE/survival,pre0622,1.2744,registry
+linear 1-cmt PK,pre0622,12.5561,registry
+linear 2-cmt PK,pre0622,7.7772,registry
+linear 2-cmt PK,pre0622,7.357,registry
+Emax/effect PD,pre0622,15.667,registry
+TMDD,pre0622,2.8508,registry
+MM/nonlinear PK,pre0622,9.9302,registry
+linear 1-cmt PK,pre0622,19.3256,registry
+linear 2-cmt PK,pre0622,17.5842,registry
+linear 1-cmt PK,pre0622,12.1957,registry
+Emax/effect PD,pre0622,14.8742,registry
+linear 1-cmt PK,pre0622,16.4994,registry
+linear 1-cmt PK,pre0622,8.9422,registry
+MM/nonlinear PK,pre0622,9.9081,registry
+MM/nonlinear PK,pre0622,6.7809,registry
+linear 1-cmt PK,pre0622,2.8171,registry
+TMDD,pre0622,7.8374,registry
+linear 1-cmt PK,pre0622,12.7985,registry
+linear 1-cmt PK,pre0622,0.9148,registry
+linear 3-cmt PK,pre0622,19.1439,registry
+linear 2-cmt PK,pre0622,4.5063,registry
+TTE/survival,pre0622,13.1792,registry
+MM/nonlinear PK,pre0622,9.9302,registry
+linear 1-cmt PK,pre0622,11.5754,registry
+TTE/survival,pre0622,10.2859,registry
+linear 2-cmt PK,pre0622,18.0669,registry
+linear 1-cmt PK,pre0622,6.0214,registry
+linear 1-cmt PK,pre0622,7.5157,registry
+linear 2-cmt PK,pre0622,9.1273,registry
+linear 2-cmt PK,pre0622,10.3599,registry
+linear 2-cmt PK,pre0622,23.1078,registry
+linear 2-cmt PK,pre0622,11.6662,registry
+linear 1-cmt PK,pre0622,9.3204,registry
+TTE/survival,pre0622,2.5917,registry
+TTE/survival,pre0622,5.499,registry
+TTE/survival,pre0622,11.4178,registry
+linear 1-cmt PK,pre0622,9.793,registry
+linear 1-cmt PK,pre0622,10.2244,registry
+linear 2-cmt PK,pre0622,12.4401,registry
+linear 2-cmt PK,pre0622,11.9584,registry
+TMDD,pre0622,3.8367,registry
+TMDD,pre0622,1.1553,registry
+TMDD,pre0622,7.5147,registry
+indirect-response PD,pre0622,9.6689,registry
+MM/nonlinear PK,pre0622,15.8383,registry
+indirect-response PD,pre0622,9.6395,registry
+linear 2-cmt PK,pre0622,11.3935,registry
+linear 2-cmt PK,pre0622,12.8011,registry
+linear 3-cmt PK,pre0622,7.1923,registry
+indirect-response PD,pre0622,14.1964,registry
+linear 2-cmt PK,pre0622,15.6655,registry
+Emax/effect PD,pre0622,12.4927,registry
+linear 2-cmt PK,pre0622,14.3422,registry
+linear 1-cmt PK,pre0622,1.4753,registry
+linear 1-cmt PK,pre0622,10.9832,registry
+linear 1-cmt PK,pre0622,2.0435,registry
+MM/nonlinear PK,pre0622,8.5316,registry
+linear 2-cmt PK,pre0622,11.4569,registry
+linear 2-cmt PK,pre0622,5.5981,registry
+linear 1-cmt PK,pre0622,15.1182,registry
+linear 3-cmt PK,pre0622,13.334,registry
+linear 1-cmt PK,pre0622,6.6542,registry
+linear 3-cmt PK,pre0622,14.0367,registry
+linear 2-cmt PK,pre0622,10.8437,registry
+linear 1-cmt PK,pre0622,5.4322,registry
+linear 1-cmt PK,pre0622,5.5338,registry
+linear 1-cmt PK,pre0622,2.8108,registry
+linear 1-cmt PK,pre0622,10.6501,registry
+linear 2-cmt PK,pre0622,7.2226,registry
+linear 2-cmt PK,pre0622,11.6766,registry
+linear 2-cmt PK,pre0622,9.7146,registry
+linear 2-cmt PK,pre0622,12.506,registry
+Emax/effect PD,pre0622,2.343,registry
+Emax/effect PD,pre0622,8.5766,registry
+Emax/effect PD,pre0622,1.8301,registry
+Emax/effect PD,pre0622,0.8198,registry
+linear 2-cmt PK,pre0622,11.6662,registry
+linear 1-cmt PK,pre0622,13.6716,registry
+linear 3-cmt PK,pre0622,14.7119,registry
+linear 3-cmt PK,pre0622,16.1615,registry
+linear 1-cmt PK,pre0622,10.4315,registry
+linear 1-cmt PK,pre0622,11.5754,registry
+MM/nonlinear PK,pre0622,12.2576,registry
+Emax/effect PD,pre0622,12.7772,registry
+indirect-response PD,pre0622,41.8656,registry
+linear 2-cmt PK,pre0622,7.9016,registry
+linear 2-cmt PK,pre0622,14.7016,registry
+linear 2-cmt PK,pre0622,16.0245,registry
+Emax/effect PD,pre0622,19.9971,registry
+linear 2-cmt PK,pre0622,13.1501,registry
+MM/nonlinear PK,pre0622,8.9488,registry
+linear 1-cmt PK,pre0622,8.2339,registry
+linear 2-cmt PK,pre0622,14.5182,registry
+Emax/effect PD,pre0622,8.2613,registry
+Emax/effect PD,pre0622,12.9549,registry
+linear 1-cmt PK,pre0622,16.5416,registry
+linear 2-cmt PK,pre0622,8.0007,registry
+TMDD,pre0622,7.937,registry
+TMDD,pre0622,1.7361,registry
+TMDD,pre0622,0.8917,registry
+linear 2-cmt PK,pre0622,7.9016,registry
+linear 2-cmt PK,pre0622,14.7016,registry
+linear 2-cmt PK,pre0622,12.4779,registry
+Emax/effect PD,pre0622,14.5936,registry
+linear 2-cmt PK,pre0622,10.4666,registry
+linear 1-cmt PK,pre0622,7.6244,registry
+linear 1-cmt PK,pre0622,6.8548,registry
+linear 1-cmt PK,pre0622,12.6315,registry
+linear 2-cmt PK,pre0622,8.5826,registry
+TTE/survival,pre0622,7.9061,registry
+linear 2-cmt PK,pre0622,11.9826,registry
+linear 3-cmt PK,pre0622,2.2908,registry
+linear 3-cmt PK,pre0622,1.1792,registry
+linear 2-cmt PK,pre0622,7.6008,registry
+linear 2-cmt PK,pre0622,15.7027,registry
+linear 2-cmt PK,pre0622,6.5316,registry
+linear 2-cmt PK,pre0622,10.3032,registry
+linear 2-cmt PK,pre0622,7.9529,registry
+linear 1-cmt PK,pre0622,6.1075,registry
+linear 1-cmt PK,pre0622,1.7788,registry
+linear 1-cmt PK,pre0622,11.0417,registry
+indirect-response PD,pre0622,17.7864,registry
+indirect-response PD,pre0622,1.5029,registry
+indirect-response PD,pre0622,5.8033,registry
+linear 3-cmt PK,pre0622,3.0593,registry
+linear 1-cmt PK,pre0622,6.8635,registry
+Emax/effect PD,pre0622,23.6897,registry
+linear 2-cmt PK,pre0622,10.134,registry
+linear 2-cmt PK,pre0622,10.2285,registry
+linear 1-cmt PK,pre0622,16.4854,registry
+Emax/effect PD,pre0622,7.7371,registry
+linear 2-cmt PK,pre0622,18.7182,registry
+linear 1-cmt PK,pre0622,5.6668,registry
+linear 1-cmt PK,pre0622,8.2613,registry
+linear 1-cmt PK,pre0622,12.9549,registry
+linear 2-cmt PK,pre0622,3.8448,registry
+linear 1-cmt PK,pre0622,15.5768,registry
+linear 1-cmt PK,pre0622,13.8457,registry
+linear 1-cmt PK,pre0622,0.8509,registry
+linear 1-cmt PK,pre0622,4.5425,registry
+linear 2-cmt PK,pre0622,6.6896,registry
+linear 2-cmt PK,pre0622,14.2047,registry
+linear 1-cmt PK,pre0622,9.599,registry
+linear 1-cmt PK,pre0622,8.5562,registry
+linear 2-cmt PK,pre0622,13.7818,registry
+linear 2-cmt PK,pre0622,8.3655,registry
+linear 1-cmt PK,pre0622,10.1976,registry
+indirect-response PD,pre0622,41.8656,registry
+linear 1-cmt PK,pre0622,12.9082,registry
+TMDD,pre0622,3.8367,registry
+TMDD,pre0622,1.1553,registry
+TMDD,pre0622,7.5147,registry
+linear 1-cmt PK,pre0622,10.2364,registry
+Emax/effect PD,pre0622,14.8742,registry
+linear 1-cmt PK,pre0622,9.12,registry
+linear 2-cmt PK,pre0622,7.9016,registry
+linear 2-cmt PK,pre0622,14.7016,registry
+linear 2-cmt PK,pre0622,10.2024,registry
+linear 1-cmt PK,pre0622,16.2253,registry
+linear 1-cmt PK,pre0622,12.7347,registry
+linear 2-cmt PK,pre0622,15.3674,registry
+linear 2-cmt PK,pre0622,5.2577,registry
+linear 1-cmt PK,pre0622,9.6806,registry
+linear 2-cmt PK,pre0622,8.4326,registry
+linear 3-cmt PK,pre0622,7.9376,registry
+linear 2-cmt PK,pre0622,1.8683,registry
+linear 2-cmt PK,pre0622,9.3772,registry
+linear 2-cmt PK,pre0622,2.1606,registry
+linear 2-cmt PK,pre0622,2.0495,registry
+linear 2-cmt PK,pre0622,1.1541,registry
+linear 1-cmt PK,pre0622,20.3112,registry
+TTE/survival,pre0622,18.6068,registry
+linear 1-cmt PK,pre0622,3.7384,registry
+Emax/effect PD,pre0622,10.8939,registry
+linear 1-cmt PK,pre0622,7.7703,registry
+linear 2-cmt PK,pre0622,12.9745,registry
+linear 1-cmt PK,pre0622,9.5314,registry
+MM/nonlinear PK,pre0622,8.5734,registry
+MM/nonlinear PK,pre0622,12.3918,registry
+Emax/effect PD,pre0622,8.2326,registry
+linear 1-cmt PK,pre0622,7.0849,registry
+Emax/effect PD,pre0622,3.0157,registry
+TMDD,pre0622,1.1633,registry
+linear 1-cmt PK,pre0622,14.4307,registry
+linear 3-cmt PK,pre0622,6.9777,registry
+linear 2-cmt PK,pre0622,13.7818,registry
+linear 2-cmt PK,pre0622,9.9382,registry
+linear 2-cmt PK,pre0622,8.434,registry
+linear 1-cmt PK,pre0622,12.6054,registry
+linear 1-cmt PK,pre0622,3.2786,registry
+linear 3-cmt PK,pre0622,10.2283,registry
+indirect-response PD,pre0622,10.5701,registry
+linear 1-cmt PK,pre0622,15.22,registry
+linear 2-cmt PK,pre0622,11.0012,registry
+linear 1-cmt PK,pre0622,5.3443,registry
+linear 1-cmt PK,pre0622,7.8511,registry
+linear 2-cmt PK,pre0622,11.8473,registry
+linear 2-cmt PK,pre0622,12.3445,registry
+linear 2-cmt PK,pre0622,11.3843,registry
+linear 2-cmt PK,pre0622,15.2547,registry
+linear 2-cmt PK,pre0622,9.0343,registry
+linear 1-cmt PK,pre0622,10.6028,registry
+indirect-response PD,pre0622,22.6645,registry
+linear 1-cmt PK,pre0622,7.0245,registry
+linear 1-cmt PK,pre0622,1.2325,registry
+linear 1-cmt PK,pre0622,9.7035,registry
+linear 2-cmt PK,pre0622,1.6187,registry
+linear 2-cmt PK,pre0622,9.7079,registry
+linear 1-cmt PK,pre0622,10.5524,registry
+linear 2-cmt PK,pre0622,14.7391,registry
+linear 2-cmt PK,pre0622,13.0463,registry
+TMDD,pre0622,32.017,registry
+linear 1-cmt PK,pre0622,12.8728,registry
+linear 2-cmt PK,pre0622,11.9826,registry
+linear 2-cmt PK,pre0622,12.9598,registry
+linear 2-cmt PK,pre0622,4.442,registry
+linear 2-cmt PK,pre0622,7.1324,registry
+linear 3-cmt PK,pre0622,21.0357,registry
+Emax/effect PD,pre0622,9.4272,registry
+linear 2-cmt PK,pre0622,13.8765,registry
+TMDD,pre0622,10.636,registry
+linear 2-cmt PK,pre0622,7.3507,registry
+linear 2-cmt PK,pre0622,0.9296,registry
+linear 2-cmt PK,pre0622,13.8083,registry
+MM/nonlinear PK,pre0622,16.9967,registry
+linear 1-cmt PK,pre0622,6.6885,registry
+linear 2-cmt PK,pre0622,9.7132,registry
+Emax/effect PD,pre0622,15.9558,registry
+linear 2-cmt PK,pre0622,22.5364,registry
+linear 2-cmt PK,pre0622,9.3497,registry
+linear 2-cmt PK,pre0622,13.9165,registry
+linear 1-cmt PK,pre0622,12.4779,registry
+linear 2-cmt PK,pre0622,7.9016,registry
+linear 2-cmt PK,pre0622,14.7016,registry
+linear 2-cmt PK,pre0622,7.9308,registry
+linear 2-cmt PK,pre0622,20.3112,registry
+linear 2-cmt PK,pre0622,12.0065,registry
+linear 2-cmt PK,pre0622,9.0576,registry
+linear 2-cmt PK,pre0622,1.1255,registry
+linear 1-cmt PK,pre0622,3.0243,registry
+linear 1-cmt PK,pre0622,12.3014,registry
+linear 2-cmt PK,pre0622,9.282,registry
+linear 2-cmt PK,pre0622,3.8836,registry
+linear 2-cmt PK,pre0622,1.4821,registry
+linear 2-cmt PK,pre0622,25.6763,registry
+linear 2-cmt PK,pre0622,0.9581,registry
+TMDD,pre0622,9.2912,registry
+TMDD,pre0622,10.4407,registry
+linear 1-cmt PK,pre0622,23.2051,registry
+linear 1-cmt PK,pre0622,8.4751,registry
+linear 1-cmt PK,pre0622,14.7296,registry
+linear 2-cmt PK,pre0622,13.8027,registry
+indirect-response PD,pre0622,22.6645,registry
+TTE/survival,pre0622,16.022,registry
+indirect-response PD,pre0622,14.3726,registry
+linear 2-cmt PK,pre0622,10.1919,registry
+linear 1-cmt PK,pre0622,14.0257,registry
+linear 1-cmt PK,pre0622,11.5628,registry
+linear 1-cmt PK,pre0622,9.9638,registry
+linear 1-cmt PK,pre0622,9.7375,registry
+linear 1-cmt PK,pre0622,8.1185,registry
+linear 1-cmt PK,pre0622,9.7843,registry
+linear 2-cmt PK,pre0622,8.0036,registry
+linear 3-cmt PK,pre0622,12.6337,registry
+linear 1-cmt PK,pre0622,5.9822,registry
+linear 2-cmt PK,pre0622,10.538,registry
+Emax/effect PD,pre0622,11.2331,registry
+linear 2-cmt PK,pre0622,7.7782,registry
+linear 1-cmt PK,pre0622,11.6768,registry
+linear 1-cmt PK,pre0622,21.4296,registry
+linear 1-cmt PK,pre0622,11.0826,registry
+linear 1-cmt PK,pre0622,8.6831,registry
+linear 2-cmt PK,pre0622,8.2515,registry
+Emax/effect PD,pre0622,13.9649,registry
+linear 2-cmt PK,pre0622,8.063,registry
+linear 2-cmt PK,pre0622,11.8088,registry
+linear 3-cmt PK,pre0622,13.2534,registry
+linear 3-cmt PK,pre0622,9.5056,registry
+linear 1-cmt PK,pre0622,13.7818,registry
+Emax/effect PD,pre0622,14.6399,registry
+Emax/effect PD,pre0622,19.397,registry
+Emax/effect PD,pre0622,14.0362,registry
+Emax/effect PD,pre0622,1.8714,registry
+linear 3-cmt PK,pre0622,1.0527,registry
+linear 2-cmt PK,pre0622,12.8762,registry
+linear 1-cmt PK,pre0622,15.3943,registry
+linear 2-cmt PK,pre0622,11.1124,registry
+indirect-response PD,pre0622,13.6202,registry
+linear 2-cmt PK,pre0622,12.6332,registry
+linear 2-cmt PK,pre0622,19.1783,registry
+linear 1-cmt PK,pre0622,11.6334,registry
+linear 3-cmt PK,pre0622,16.092,registry
+linear 2-cmt PK,pre0622,10.6969,registry
+linear 1-cmt PK,pre0622,2.1875,registry
+linear 1-cmt PK,pre0622,7.5032,registry
+linear 2-cmt PK,pre0622,10.8125,registry
+linear 3-cmt PK,pre0622,2.7321,registry
+linear 2-cmt PK,pre0622,19.9331,registry
+linear 2-cmt PK,pre0622,21.082,registry
+TMDD,pre0622,11.4993,registry
+MM/nonlinear PK,pre0622,9.4459,registry
+linear 3-cmt PK,pre0622,22.3175,registry
+Emax/effect PD,pre0622,13.9649,registry
+MM/nonlinear PK,pre0622,11.1794,registry
+TMDD,pre0622,8.6733,registry
+TMDD,pre0622,8.3519,registry
+Emax/effect PD,pre0622,14.6399,registry
+Emax/effect PD,pre0622,19.397,registry
+Emax/effect PD,pre0622,14.0362,registry
+Emax/effect PD,pre0622,1.8714,registry
+linear 2-cmt PK,pre0622,8.4685,registry
+linear 1-cmt PK,pre0622,8.4092,registry
+Emax/effect PD,pre0622,19.7874,registry
+linear 2-cmt PK,pre0622,10.6131,registry
+linear 3-cmt PK,pre0622,12.2817,registry
+TMDD,pre0622,11.5842,registry
+linear 2-cmt PK,baseline,18.1423,registry
+linear 1-cmt PK,pre0622,5.571,registry
+TTE/survival,pre0622,10.9036,registry
+linear 2-cmt PK,pre0622,7.8182,registry
+TMDD,pre0622,9.2912,registry
+TMDD,pre0622,10.4407,registry
+linear 3-cmt PK,pre0622,9.8167,registry
+linear 1-cmt PK,pre0622,20.4783,registry
+linear 3-cmt PK,pre0622,21.3118,registry
+linear 1-cmt PK,pre0622,11.5628,registry
+Emax/effect PD,pre0622,13.9649,registry
+linear 1-cmt PK,pre0622,7.8191,registry
+TMDD,pre0622,14.1851,registry
+TMDD,pre0622,10.5923,registry
+linear 2-cmt PK,pre0622,19.1783,registry
+MM/nonlinear PK,pre0622,11.3935,registry
+MM/nonlinear PK,pre0622,12.8011,registry
+linear 1-cmt PK,pre0622,14.9724,registry
+Emax/effect PD,pre0622,11.5613,registry
+indirect-response PD,pre0622,9.6395,registry
+linear 3-cmt PK,pre0622,3.1833,registry
+linear 1-cmt PK,pre0622,8.6574,registry
+MM/nonlinear PK,pre0622,8.5375,registry
+linear 2-cmt PK,pre0622,8.0471,registry
+linear 2-cmt PK,pre0622,6.9418,registry
+linear 3-cmt PK,pre0622,15.0993,registry
+linear 3-cmt PK,pre0622,7.6244,registry
+linear 3-cmt PK,pre0622,6.8548,registry
+linear 2-cmt PK,pre0622,1.2325,registry
+linear 2-cmt PK,pre0622,9.7035,registry
+linear 1-cmt PK,pre0622,17.7864,registry
+linear 1-cmt PK,pre0622,1.5029,registry
+linear 1-cmt PK,pre0622,5.8033,registry
+linear 1-cmt PK,pre0622,7.2429,registry
+linear 2-cmt PK,pre0622,8.6831,registry
+linear 2-cmt PK,pre0622,6.6826,registry
+linear 1-cmt PK,pre0622,8.932,registry
+linear 1-cmt PK,pre0622,7.1953,registry
+linear 1-cmt PK,pre0622,1.7673,registry
+linear 2-cmt PK,pre0622,7.7417,registry
+linear 1-cmt PK,pre0622,5.1474,registry
+linear 2-cmt PK,pre0622,19.2996,registry
+linear 1-cmt PK,pre0622,10.7543,registry
+linear 3-cmt PK,pre0622,6.0903,registry
+linear 3-cmt PK,pre0622,3.4322,registry
+linear 2-cmt PK,pre0622,14.7947,registry
+linear 1-cmt PK,pre0622,14.7119,registry
+linear 1-cmt PK,pre0622,16.1615,registry
+linear 2-cmt PK,baseline,1.5026,registry
+linear 1-cmt PK,pre0622,6.2933,registry
+linear 2-cmt PK,pre0622,5.111,registry
+linear 2-cmt PK,pre0622,6.0581,registry
+linear 1-cmt PK,pre0622,13.3853,registry
+linear 2-cmt PK,pre0622,9.5801,registry
+linear 1-cmt PK,pre0622,7.7453,registry
+linear 1-cmt PK,pre0622,1.3535,registry
+linear 2-cmt PK,pre0622,10.8981,registry
+TTE/survival,pre0622,20.1751,registry
+TTE/survival,pre0622,13.67,registry
+linear 1-cmt PK,pre0622,7.4971,registry
+linear 2-cmt PK,pre0622,14.0395,registry
+linear 3-cmt PK,pre0622,0.9124,registry
+linear 3-cmt PK,pre0622,18.6663,registry
+linear 2-cmt PK,pre0622,9.5598,registry
+linear 2-cmt PK,pre0622,5.341,registry
+linear 1-cmt PK,pre0622,9.7476,registry
+linear 2-cmt PK,pre0622,1.1426,registry
+linear 2-cmt PK,pre0622,12.3801,registry
+linear 2-cmt PK,pre0622,8.5282,registry
+linear 2-cmt PK,pre0622,6.3183,registry
+linear 1-cmt PK,pre0622,15.1461,registry
+linear 2-cmt PK,pre0622,11.4332,registry
+linear 2-cmt PK,pre0622,15.4687,registry
+linear 2-cmt PK,pre0622,9.1926,registry
+linear 1-cmt PK,pre0622,7.9674,registry
+linear 2-cmt PK,pre0622,4.6744,registry
+linear 2-cmt PK,pre0622,10.9637,registry
+TMDD,pre0622,4.7411,registry
+TTE/survival,pre0622,23.7002,registry
+linear 2-cmt PK,pre0622,16.9321,registry
+linear 1-cmt PK,pre0622,7.1131,registry
+linear 1-cmt PK,pre0622,16.4994,registry
+linear 1-cmt PK,pre0622,5.6863,registry
+linear 1-cmt PK,pre0622,1.97,registry
+linear 1-cmt PK,pre0622,8.7746,registry
+Emax/effect PD,pre0622,12.2325,registry
+linear 3-cmt PK,pre0622,12.4203,registry
+linear 2-cmt PK,pre0622,7.9478,registry
+linear 2-cmt PK,pre0622,12.9681,registry
+linear 2-cmt PK,pre0622,20.2554,registry
+linear 1-cmt PK,pre0622,9.8737,registry
+MM/nonlinear PK,pre0622,3.3641,registry
+linear 1-cmt PK,pre0622,13.8705,registry
+linear 1-cmt PK,pre0622,2.1194,registry
+linear 1-cmt PK,pre0622,6.0039,registry
+MM/nonlinear PK,pre0622,7.1494,registry
+linear 2-cmt PK,pre0622,5.8606,registry
+linear 2-cmt PK,pre0622,10.0407,registry
+linear 3-cmt PK,pre0622,1.4189,registry
+linear 2-cmt PK,pre0622,7.5396,registry
+linear 2-cmt PK,pre0622,3.7902,registry
+linear 3-cmt PK,pre0622,8.2569,registry
+linear 2-cmt PK,pre0622,9.8531,registry
+MM/nonlinear PK,pre0622,4.1998,registry
+linear 1-cmt PK,pre0622,15.1056,registry
+linear 2-cmt PK,pre0622,8.9414,registry
+linear 1-cmt PK,pre0622,11.2309,registry
+linear 1-cmt PK,pre0622,7.2037,registry
+MM/nonlinear PK,pre0622,14.1851,registry
+MM/nonlinear PK,pre0622,10.5923,registry
+linear 1-cmt PK,pre0622,16.3381,registry
+linear 3-cmt PK,pre0622,2.8374,registry
+Emax/effect PD,pre0622,17.3389,registry
+linear 1-cmt PK,pre0622,23.891,registry
+linear 2-cmt PK,pre0622,12.6332,registry
+linear 3-cmt PK,pre0622,2.6999,registry
+TTE/survival,pre0622,19.7126,registry
+Emax/effect PD,pre0622,14.6399,registry
+Emax/effect PD,pre0622,19.397,registry
+Emax/effect PD,pre0622,14.0362,registry
+Emax/effect PD,pre0622,1.8714,registry
+linear 1-cmt PK,pre0622,6.9354,registry
+linear 1-cmt PK,pre0622,6.6726,registry
+Emax/effect PD,pre0622,8.1185,registry
+Emax/effect PD,pre0622,9.7843,registry
+linear 3-cmt PK,pre0622,7.9472,registry
+Emax/effect PD,pre0622,11.1317,registry
+linear 2-cmt PK,recent,6.3465,worktree
+indirect-response PD,recent,18.3076,worktree
+linear 2-cmt PK,recent,12.592,worktree
+linear 2-cmt PK,recent,1.4656,worktree
+TTE/survival,recent,24.2682,worktree
+linear 1-cmt PK,recent,8.6284,worktree
+linear 2-cmt PK,recent,18.0145,worktree
+linear 2-cmt PK,baseline,21.1717,worktree
+linear 3-cmt PK,baseline,12.785,worktree
+linear 2-cmt PK,baseline,9.8244,worktree
+TTE/survival,baseline,26.7827,worktree
+TTE/survival,baseline,26.7827,worktree
+TTE/survival,baseline,26.7827,worktree
+TTE/survival,baseline,26.7827,worktree
+TTE/survival,baseline,26.7827,worktree
+Emax/effect PD,baseline,35.2306,worktree
+TTE/survival,baseline,17.7225,worktree
+linear 1-cmt PK,baseline,6.6366,worktree
+linear 2-cmt PK,baseline,8.1364,worktree
+indirect-response PD,baseline,19.3173,worktree
+TMDD,baseline,15.9927,worktree
+linear 2-cmt PK,baseline,14.2513,worktree
+indirect-response PD,baseline,14.9513,worktree
+Emax/effect PD,baseline,34.3798,worktree
+TMDD,baseline,20.1592,worktree
+TMDD,baseline,20.1592,worktree
+linear 1-cmt PK,baseline,11.5052,worktree
+linear 2-cmt PK,baseline,7.7223,worktree
+Emax/effect PD,baseline,27.1846,worktree
+linear 2-cmt PK,baseline,17.0146,worktree
+linear 2-cmt PK,baseline,17.2759,worktree
