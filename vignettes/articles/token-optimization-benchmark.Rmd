@@ -1,0 +1,163 @@
+---
+title: "Per-task extraction economics: a token & cost benchmark across the optimization rollout"
+author: "nlmixr2 project"
+date: "2026-06-25"
+output: rmarkdown::html_document
+---
+
+<!--
+Reproducible benchmark companion to ingestion-challenges.Rmd (the methods-paper
+draft). The per-task data are a frozen snapshot baked into
+inst/extdata/token_optimization_2026-06-25.csv so this article re-knits without
+the live runner. Refresh by re-exporting that CSV from the runner state files
+and bumping the date.
+-->
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+f <- system.file("extdata", "token_optimization_2026-06-25.csv", package = "nlmixr2libingest")
+if (!nzchar(f)) f <- "../../inst/extdata/token_optimization_2026-06-25.csv"
+d <- read.csv(f, stringsAsFactors = FALSE)
+has_kable <- requireNamespace("knitr", quietly = TRUE)
+```
+
+## Purpose
+
+This article measures the **per-task token and dollar cost** of literature
+model extraction, split by outcome (a model was **built** vs the paper was a
+**no-extraction** skip), and compares a **recent** cohort against an older
+**baseline** cohort. The motivating question: *how much benefit are the token
+optimizations delivering?*
+
+The cost model (see `ingestion-challenges.Rmd`) is dominated by
+`cache_read x agent-turns`, so we report the cost drivers — cache-read and
+output tokens — alongside total tokens and the runner's dollar estimate.
+
+## Data and method
+
+- **Source.** Per-task aggregates summed across all runs of each `completed`
+  task, read from the runner state files (frozen snapshot).
+- **Cohorts.**
+  - `recent_24h` — completed in the 24 h before the snapshot
+    (2026-06-25 11:28 UTC). This is **after** the agent-side *policy
+    self-check* (merged 2026-06-23) and its *strengthening* (2026-06-24).
+  - `baseline_48h+` — the 50 most-recent tasks completed **more than 48 h**
+    before the snapshot that carry a deliverable report (so they are
+    classifiable). This is **before** the policy self-check.
+- **Outcome classifier.** Report-based: a task is a `no_extraction` skip if its
+  `reports/<task>.md` deliverable contains skip language (e.g. "NOT a fittable
+  model", "(skip)", "methodology paper", "conference poster ... not"); otherwise
+  `extraction`.
+
+```{r cohorts}
+tab <- as.data.frame.matrix(table(d$cohort, d$cls))
+tab$total <- rowSums(tab)
+if (has_kable) knitr::kable(tab, caption = "Task counts by cohort and outcome")
+```
+
+> **Read the confounds before the numbers.** Both cohorts are **post-Phase-0**:
+> the register-lookup (`lookup_canonical`) and R-log-filter optimizations landed
+> 2026-06-22, so *both* cohorts already have them. The cohort difference is
+> therefore mainly the **policy self-check**, which targets *sidecar frequency*,
+> not per-task tokens. Measuring the Phase-0 token optimizations would need a
+> pre-2026-06-22 baseline — unavailable here because older tasks lack the
+> deliverable reports the classifier needs.
+
+## Results
+
+```{r helpers}
+summ1 <- function(x) {
+  x <- x[is.finite(x)]
+  c(n = length(x), mean = mean(x), sd = if (length(x) > 1) sd(x) else 0,
+    median = median(x), p25 = unname(quantile(x, .25)), p75 = unname(quantile(x, .75)))
+}
+fmt <- function(v, money) {
+  if (money) sprintf("$%.2f", v)
+  else ifelse(abs(v) >= 1000, sprintf("%.0fk", v / 1000), sprintf("%.0f", v))
+}
+metrics <- c(cost = "cost (USD)", total = "total tokens",
+             cache_read = "cache-read tokens", output = "output tokens")
+build <- function(cls) {
+  rows <- list()
+  for (m in names(metrics)) for (co in c("recent_24h", "baseline_48h+")) {
+    s <- summ1(d[d$cls == cls & d$cohort == co, m])
+    money <- m == "cost"
+    rows[[length(rows) + 1]] <- data.frame(
+      metric = metrics[m],
+      cohort = ifelse(co == "recent_24h", "recent (post-policy)", "baseline (>48h)"),
+      n = s["n"],
+      mean = fmt(s["mean"], money), sd = fmt(s["sd"], money),
+      median = fmt(s["median"], money), p25 = fmt(s["p25"], money), p75 = fmt(s["p75"], money),
+      row.names = NULL, check.names = FALSE)
+  }
+  do.call(rbind, rows)
+}
+```
+
+### Extraction (a model was built)
+
+```{r extraction}
+if (has_kable) knitr::kable(build("extraction"),
+  caption = "Extraction tasks — mean / sd / median / p25 / p75 (small n; medians unstable)")
+```
+
+### No-extraction (skip)
+
+```{r noextraction}
+if (has_kable) knitr::kable(build("no_extraction"),
+  caption = "No-extraction (skip) tasks — mean / sd / median / p25 / p75")
+```
+
+## Interpretation
+
+1. **Skips — the bulk of both cohorts (`r sum(d$cls=="no_extraction")` of
+   `r nrow(d)` tasks) — are flat.** Median cost is ~\$0.7–0.8 and median total
+   tokens ~0.5 M in both cohorts (recent slightly *higher*). This is the
+   expected result: the skip path (read the paper → decide not-fittable → write
+   a note) is **not a target** of the per-task token optimizations, and the
+   policy self-check changes *whether a sidecar is filed*, not the cost of
+   reaching a skip decision.
+
+2. **Extractions are too small-n to conclude (`r sum(d$cls=="extraction")`
+   tasks total).** Mean cost is modestly lower in the recent cohort, but the
+   token medians move the other way — a signature of small-sample instability,
+   not a real effect. The baseline extraction sample (n≈9) is also atypically
+   light. No reliable per-task token *reduction* is demonstrated here.
+
+3. **The dominant driver — cache-read tokens — is essentially unchanged**
+   between cohorts. The cached per-turn context has not shrunk measurably, which
+   is consistent with point 1: the policy work did not touch what the agent
+   carries per turn.
+
+4. **The realized benefit of the recent work is elsewhere: sidecar reduction.**
+   Across the recent cohort the new-sidecar rate is ~1–2% of completions (vs a
+   large historical backlog), i.e. far fewer stop/restart cycles. That is an
+   operator-time and throughput win, **not** a per-task-token win — and this
+   benchmark, which holds per-task tokens fixed, is exactly where you would
+   *not* see it.
+
+## Limitations
+
+- **Small extraction n** (recent ≈14, baseline ≈9); medians swing on individual
+  tasks. Treat the extraction rows as directional at best.
+- **`cost_usd` is partially under-populated** in the run records (cost and token
+  medians land on different tasks), so **token counts are the firmer metric**;
+  dollar figures are indicative.
+- **Cohorts are Metrum/vendor-index-dominated**, which is heavily skip-weighted —
+  few extraction samples to show the build-loop optimizations in.
+- **Report-based classifier**; the baseline is restricted to report-bearing
+  (post-2026-06-22) tasks, so it cannot reach pre-Phase-0 work.
+- **Both cohorts are post-Phase-0**, so this isolates the *policy* work, not the
+  register-lookup / R-log-filter optimizations.
+
+## Conclusion
+
+In this window the policy optimizations did **not** reduce per-task tokens — and
+they were not expected to; their value is fewer sidecars. The per-task token
+optimizations (Phase 0) cannot be isolated here because both cohorts already
+carry them and no classifiable pre-Phase-0 baseline exists. **This snapshot is
+therefore best used as the baseline** against which future Phase 1–3 work
+(archetype templates, distillation, budget escalation) should be A/B-measured —
+ideally with a per-task `POLICY_SELFCHECK` / optimization marker so the
+extraction-vs-skip split and the optimization cohort are recorded at the source
+rather than reconstructed.
