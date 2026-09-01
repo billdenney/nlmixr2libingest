@@ -130,6 +130,55 @@ lint_vignette <- function(rmd, model = NULL, max_per_arm = 200L) {
              " (oversized cohorts are the top render-timeout / cost cause)"))
   }
 
+  # 5. Assertions that cannot hold across machines, on a vignette that
+  #    simulates a cohort.
+  #
+  # rxSetSeed() fixes rxode2's RNG stream PER SOLVER THREAD, not across thread
+  # counts, so a 2-core CI runner and a 16-thread workstation draw different
+  # cohorts from identical source and no seed makes them agree. An assertion
+  # tight enough to sit inside that spread passes where it was written and
+  # fails where it runs. A 2026-08-31 consolidation shipped twelve of these;
+  # CI reported four, because each render shard aborts on its first failure.
+  #
+  # Only the high-precision shapes are flagged, and only when the vignette
+  # actually simulates (set.seed + rxSolve). `>=` / `<=` forms are deliberately
+  # NOT flagged: `all(conc >= 0)` is the recommended solver-noise guard.
+  simulates <- grepl("set.seed", blob, fixed = TRUE) &&
+    grepl("rxSolve", blob, fixed = TRUE)
+  if (simulates) {
+    # Match against CODE only. A correct fix documents the old assertion in a
+    # comment ("an earlier revision used `all(diff(pv) < 0)` ..."), and matching
+    # raw text would re-flag the very vignette that was just repaired -- a
+    # linter that fires on the fixed version teaches authors to ignore it.
+    codeonly <- sub("(^|[^\\\\])#.*$", "\\1", code, perl = TRUE)
+    cblob <- paste(codeonly, collapse = "\n")
+    frag <- list(
+      c("assert-strict-monotone",
+        # Compared against literal 0 only. `all(diff(x) < 0.25)` is a step
+        # TOLERANCE -- the recommended fix -- and must not be flagged.
+        "all\\s*\\(\\s*diff\\s*\\([^)]*\\)\\s*[<>]\\s*0+(\\.0+)?\\s*\\)",
+        "asserts STRICT step-by-step monotonicity of a simulated series",
+        "if the series is COHORT-derived, assert the trend (last vs first) or allow a step tolerance -- adjacent points invert on a redraw; if it is a typical-value / zeroRe() prediction it is deterministic and strict is correct, so this is a prompt to check which"),
+      c("assert-exact-zero",
+        "all\\s*\\([^)]*==\\s*0\\s*\\)",
+        "asserts an EXACT zero over a simulated vector",
+        "bound a small permitted fraction instead -- 'no subject exceeds X' is a property of one draw, not of the model")
+      # NOTE: an `all(x > 0)` element-wise sign rule was tried and removed.
+      # It is a legitimate and common shape when the effect is large and
+      # unambiguous (positive controls such as
+      # `all(prohibited_athletes$pct_over_mrl > 0)`), so it fired on correct
+      # vignettes far too often to be worth its recall. Sign assertions on
+      # NEAR-ZERO effects are still the most common failure -- they are covered
+      # in prose in the failure-pattern catalogue, because distinguishing
+      # "near zero" from "clearly positive" needs the values, not the source.
+    )
+    for (f in frag) {
+      if (grepl(f[[2L]], cblob, perl = TRUE)) {
+        iss[[length(iss) + 1L]] <- .lintIssue(f[[1L]], "warning", f[[3L]], f[[4L]])
+      }
+    }
+  }
+
   issues <- if (length(iss)) do.call(rbind, iss) else
     data.frame(check = character(), severity = character(),
                message = character(), fix = character(), stringsAsFactors = FALSE)
