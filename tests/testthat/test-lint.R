@@ -58,3 +58,61 @@ test_that("print renders for both outcomes", {
   writeLines(c("---", "t", "---", "```{r}", "1+1", "```"), rmd)
   expect_s3_class(print(lint_vignette(rmd)), "nli_vignette_lint")
 })
+
+test_that("lint_vignette flags assertions that cannot hold across machines", {
+  # rxSetSeed() partitions rxode2's RNG per solver thread, so a CI runner draws
+  # a different cohort than the authoring machine. These three shapes therefore
+  # pass where they are written and fail where they run.
+  rmd <- withr::local_tempfile(fileext = ".Rmd")
+  writeLines(c(
+    "```{r}", "set.seed(1)", "sim <- rxSolve(mod, ev)",
+    "stopifnot(all(diff(pv) < 0))",
+    "stopifnot(all(pct_over_mrl == 0))",
+    "```"
+  ), rmd)
+  res <- lint_vignette(rmd)
+  expect_true(all(c("assert-strict-monotone", "assert-exact-zero") %in%
+                    res$issues$check))
+})
+
+test_that("lint_vignette does not flag the recommended >= solver-noise guard", {
+  # `all(conc >= 0)` is what the failure-pattern catalogue tells authors to
+  # write, so flagging it would train them to ignore the linter.
+  rmd <- withr::local_tempfile(fileext = ".Rmd")
+  writeLines(c("```{r}", "set.seed(1)", "sim <- rxSolve(mod, ev)",
+               "stopifnot(all(sim$conc >= 0))", "```"), rmd)
+  res <- lint_vignette(rmd)
+  expect_false(any(grepl("^assert-", res$issues$check)))
+})
+
+test_that("lint_vignette does not flag assertions in a non-simulating vignette", {
+  # With no cohort draw there is no thread-dependent RNG, so a sign assertion
+  # on a deterministic quantity is legitimate and must not be flagged.
+  rmd <- withr::local_tempfile(fileext = ".Rmd")
+  writeLines(c("```{r}", "x <- solve_closed_form()",
+               "stopifnot(all(x > 0))", "```"), rmd)
+  res <- lint_vignette(rmd)
+  expect_false(any(grepl("^assert-", res$issues$check)))
+})
+
+test_that("lint_vignette does not re-flag a fixed vignette that documents the old assertion", {
+  # A good fix leaves a comment quoting the assertion it replaced. Matching raw
+  # text would re-flag the repaired vignette, which is how a linter earns being
+  # ignored.
+  rmd <- withr::local_tempfile(fileext = ".Rmd")
+  writeLines(c("```{r}", "set.seed(1)", "sim <- rxSolve(mod, ev)",
+               "# An earlier revision used `all(diff(pv) < 0)`, which requires",
+               "# every adjacent pair to be ordered.",
+               "stopifnot(pv[length(pv)] < pv[1])", "```"), rmd)
+  res <- lint_vignette(rmd)
+  expect_false(any(grepl("^assert-", res$issues$check)))
+})
+
+test_that("lint_vignette does not flag a step TOLERANCE as strict monotonicity", {
+  # `all(diff(x) < 0.25)` is the recommended replacement for
+  # `all(diff(x) < 0)`; flagging it would fire on the fix.
+  rmd <- withr::local_tempfile(fileext = ".Rmd")
+  writeLines(c("```{r}", "set.seed(1)", "sim <- rxSolve(mod, ev)",
+               "stopifnot(all(diff(peaks$cmax_norm) < 0.25))", "```"), rmd)
+  expect_false(any(grepl("^assert-", lint_vignette(rmd)$issues$check)))
+})
