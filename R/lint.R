@@ -799,17 +799,22 @@
                 "the article which you chose.")
   for (s in scan$sites) {
     if (s$stated) next
-    if (s$kind == "rxSolve") {
-      lead <- if (is.na(s$opaque)) {
-        paste0("`", s$text, "` states neither addlKeepsCov nor nonmem = TRUE, but ")
-      } else {
-        paste0("`", s$text, "` does not state addlKeepsCov or nonmem = TRUE where it ",
-               "can be read: its control argument, `", s$opaque, "`, is a variable ",
-               "or call whose setting could not be read here, and ")
-      }
+    if (s$kind == "rxSolve" && is.na(s$opaque)) {
       iss[[length(iss) + 1L]] <- .lintIssue(
-        "addlkeepscov-unstated", "warning", paste0(lead, what, why),
+        "addlkeepscov-unstated", "warning",
+        paste0("`", s$text, "` states neither addlKeepsCov nor nonmem = TRUE, but ",
+               what, why),
         "add addlKeepsCov = TRUE (NONMEM) or addlKeepsCov = FALSE (rxode2 default), or nonmem = TRUE, to this call (or inside rxControl() given as control =), and say in the article which you chose")
+    } else if (s$kind == "rxSolve") {
+      # the call does not state the setting where it can be read, but its
+      # control argument may: that is not known to be unstated
+      iss[[length(iss) + 1L]] <- .lintIssue(
+        "addlkeepscov-unverifiable", "warning",
+        paste0("cannot verify `", s$text, "`: it does not state addlKeepsCov or ",
+               "nonmem = TRUE where it can be read, and its control argument, `",
+               s$opaque, "`, is a variable or call whose setting could not be read ",
+               "here; ", what, why),
+        "state addlKeepsCov = / nonmem = TRUE in the call itself, or give control = rxControl(addlKeepsCov = ...) inline so it can be read, and say in the article which you chose")
     } else if (s$kind == "solve-unresolved") {
       iss[[length(iss) + 1L]] <- .lintIssue(
         "addlkeepscov-unverifiable", "warning",
@@ -906,14 +911,16 @@
 #' variable may hold `FALSE`; `nonmem = FALSE`, `NULL` and `nonmem = flag` do not
 #' count. Arguments of other nested calls do not count either:
 #' `foo(addlKeepsCov = TRUE)` inside an `rxSolve()` call is `foo`'s argument.
-#' `control = ctl`, with `ctl` defined elsewhere, is not followed; the finding
-#' says the setting could not be read there. For an indirect call
+#' `control = ctl`, with `ctl` defined elsewhere, is not followed, and the call
+#' is reported as not verifiable rather than as unstated. For an indirect call
 #' (`do.call(rxSolve, list(mod, ev, addlKeepsCov = TRUE))`,
 #' `lapply(mods, solve, ev, nonmem = TRUE)`) the setting is looked for among its
 #' arguments and in a `list()` or `c()` among them.
 #'
-#' *Reported as not verifiable* (unless the call itself states the setting):
-#' `nlmixr2(..., est = "rxSolve")`, or an `est` that is not a literal;
+#' *Reported as not verifiable* (unless the call itself states the setting): an
+#' `rxSolve()` or model `solve()` whose `control =` is a variable or any call
+#' other than `rxControl()` / `list()`, since the setting inside it cannot be
+#' read; `nlmixr2(..., est = "rxSolve")`, or an `est` that is not a literal;
 #' `simulate()`; `rxSolve` or `solve` handed to another function as a value
 #' (`do.call()`, `lapply()`, `Map()`, `match.fun()`, ...) -- `solve` only when
 #' it travels with a model, a list of models, an event table or an

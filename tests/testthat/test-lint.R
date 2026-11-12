@@ -757,13 +757,23 @@ test_that("the setting must be in the call or its control; a variable counts for
   for (args in c("foo(addlKeepsCov = TRUE)", "foo(nonmem = TRUE)",
                  "addlKeepsCov = NULL", "nonmem = NULL", "nonmem = FALSE",
                  "nonmem = nm", "control = rxControl(nonmem = nm)",
-                 "control = ctl", "control = foo(nonmem = TRUE)")) {
+                 "control = list(nonmem = FALSE)")) {
     expect_true(rx_unstated(args), info = args)
+  }
+  # a control that is not an rxControl()/list() call may hold the setting: it
+  # cannot be read, which is not the same as not stated
+  for (args in c("control = ctl", "control = foo(nonmem = TRUE)",
+                 "control = ctl, nonmem = FALSE")) {
+    expect_true(is_unverifiable(sprintf("sim <- rxode2::rxSolve(mod, ev, %s)", args)),
+                info = args)
   }
   for (args in c("addlKeepsCov = keep", "nonmem = T",
                  "control = list(addlKeepsCov = TRUE)",
-                 "control = rxControl(nonmem = TRUE)", "rxControl(addlKeepsCov = FALSE)")) {
+                 "control = rxControl(nonmem = TRUE)", "rxControl(addlKeepsCov = FALSE)",
+                 "control = ctl, addlKeepsCov = FALSE", "control = ctl, nonmem = TRUE")) {
     expect_false(rx_unstated(args), info = args)
+    expect_identical(lagged_checks_of(sprintf("sim <- rxode2::rxSolve(mod, ev, %s)", args)),
+                     character(), info = args)
   }
 })
 
@@ -1053,17 +1063,20 @@ test_that("a covariate that never changes between occasions is reported like any
                               model = mod)$n, 0L)
 })
 
-test_that("an unreadable control argument is said to be unreadable, not missing", {
+test_that("an unreadable control argument is not verifiable, not unstated", {
   skip_if_not_installed("rxode2")
   res <- lagged_one(c("ctl <- rxControl(addlKeepsCov = TRUE)",
                       "sim <- rxode2::rxSolve(mod, ev, control = ctl)"))
-  expect_identical(lagged_checks(res), "addlkeepscov-unstated")
+  expect_identical(lagged_checks(res), "addlkeepscov-unverifiable")
   msg <- res$issues$message
-  expect_match(msg, "does not state addlKeepsCov or nonmem = TRUE where it can be read",
-               fixed = TRUE)
+  expect_match(msg, "cannot verify `rxode2::rxSolve(mod, ev, control = ctl)`", fixed = TRUE)
   expect_match(msg, "its control argument, `ctl`, is a variable or call whose setting could not be read",
                fixed = TRUE)
   expect_false(grepl("states neither", msg, fixed = TRUE))
+  # a model solve() with such a control is judged the same way
+  expect_identical(
+    lagged_checks_of(c(from_db, "sim <- solve(mod, ev, control = ctl)")),
+    "addlkeepscov-unverifiable")
   # without a control argument the call plainly states neither
   expect_match(lagged_one("sim <- rxode2::rxSolve(mod, ev)")$issues$message,
                "states neither addlKeepsCov nor nonmem = TRUE", fixed = TRUE)

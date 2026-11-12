@@ -88,14 +88,16 @@ literal \code{TRUE}, because it sets \code{addlKeepsCov} only when it is \code{T
 variable may hold \code{FALSE}; \code{nonmem = FALSE}, \code{NULL} and \code{nonmem = flag} do not
 count. Arguments of other nested calls do not count either:
 \code{foo(addlKeepsCov = TRUE)} inside an \code{rxSolve()} call is \code{foo}'s argument.
-\code{control = ctl}, with \code{ctl} defined elsewhere, is not followed; the finding
-says the setting could not be read there. For an indirect call
+\code{control = ctl}, with \code{ctl} defined elsewhere, is not followed, and the call
+is reported as not verifiable rather than as unstated. For an indirect call
 (\code{do.call(rxSolve, list(mod, ev, addlKeepsCov = TRUE))},
 \code{lapply(mods, solve, ev, nonmem = TRUE)}) the setting is looked for among its
 arguments and in a \code{list()} or \code{c()} among them.
 
-\emph{Reported as not verifiable} (unless the call itself states the setting):
-\code{nlmixr2(..., est = "rxSolve")}, or an \code{est} that is not a literal;
+\emph{Reported as not verifiable} (unless the call itself states the setting): an
+\code{rxSolve()} or model \code{solve()} whose \verb{control =} is a variable or any call
+other than \code{rxControl()} / \code{list()}, since the setting inside it cannot be
+read; \code{nlmixr2(..., est = "rxSolve")}, or an \code{est} that is not a literal;
 \code{simulate()}; \code{rxSolve} or \code{solve} handed to another function as a value
 (\code{do.call()}, \code{lapply()}, \code{Map()}, \code{match.fun()}, ...) -- \code{solve} only when
 it travels with a model, a list of models, an event table or an
