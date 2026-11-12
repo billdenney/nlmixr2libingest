@@ -20,3 +20,7 @@ inst/doc/
 vignettes/*.html
 vignettes/articles/*.html
 docs
+
+# testthat failure artefacts
+tests/testthat/_problems/
+tests/testthat/testthat-problems.rds
