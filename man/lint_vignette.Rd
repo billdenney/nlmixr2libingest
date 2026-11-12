@@ -54,12 +54,14 @@ the article defines itself (its own \code{rxSolve()} call is judged instead).
 Chunks with \code{eval = FALSE} are skipped.
 
 \emph{What counts as stating the setting.} \verb{addlKeepsCov =} with any value but
-\code{NULL}, or \verb{nonmem =} with anything but \code{NULL} or a literal \code{FALSE}, among
-the call's own arguments or inside an \code{rxControl()} (or \code{control = list()})
-argument. A variable counts, since it states the setting. Arguments of other
-nested calls do not: \code{foo(addlKeepsCov = TRUE)} inside an \code{rxSolve()} call is
-\code{foo}'s argument. \code{control = ctl}, with \code{ctl} defined elsewhere, is not
-followed.
+\code{NULL} (a variable counts: the author addressed \code{addlKeepsCov} itself), or a
+literal \code{nonmem = TRUE} (or \code{T}), among the call's own arguments or inside an
+\code{rxControl()} (or \code{control = list()}) argument. \code{nonmem} counts only as a
+literal \code{TRUE}, because it sets \code{addlKeepsCov} only when it is \code{TRUE} and a
+variable may hold \code{FALSE}; \code{nonmem = FALSE}, \code{NULL} and \code{nonmem = flag} do not
+count. Arguments of other nested calls do not count either:
+\code{foo(addlKeepsCov = TRUE)} inside an \code{rxSolve()} call is \code{foo}'s argument.
+\code{control = ctl}, with \code{ctl} defined elsewhere, is not followed.
 
 \emph{Reported as not verifiable} (unless the call itself states the setting):
 \code{nlmixr2(..., est = "rxSolve")}, or an \code{est} that is not a literal;

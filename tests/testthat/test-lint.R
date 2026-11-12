@@ -587,9 +587,8 @@ test_that(".lintCallStates reads only the call's own arguments and its control",
   expect_true(states("rxSolve(m, e, addlKeepsCov = FALSE)"))
   expect_true(states("rxSolve(m, e, nonmem = TRUE)"))
   expect_true(states("rxSolve(m, e, nonmem = T)"))
-  # a variable states the setting, though its value cannot be read
+  # a variable counts for addlKeepsCov, which the author addressed directly
   expect_true(states("rxSolve(m, e, addlKeepsCov = flag)"))
-  expect_true(states("rxSolve(m, e, nonmem = nm)"))
   # inside rxControl() or a control = list()
   expect_true(states("rxSolve(m, e, control = rxControl(addlKeepsCov = TRUE))"))
   expect_true(states("rxSolve(m, e, control = list(nonmem = TRUE))"))
@@ -599,6 +598,11 @@ test_that(".lintCallStates reads only the call's own arguments and its control",
   expect_false(states("rxSolve(m, e, nonmem = FALSE)"))
   expect_false(states("rxSolve(m, e, nonmem = F)"))
   expect_false(states("rxSolve(m, e, nonmem = NULL)"))
+  # nonmem sets addlKeepsCov only when TRUE, and a variable may hold FALSE
+  expect_false(states("rxSolve(m, e, nonmem = nm)"))
+  expect_false(states("rxSolve(m, e, nonmem = c(TRUE))"))
+  expect_false(states("rxSolve(m, e, nonmem = !FALSE)"))
+  expect_false(states("rxSolve(m, e, control = list(nonmem = nm))"))
   expect_false(states("rxSolve(m, e, addlKeepsCov = NULL)"))
   expect_false(states("rxSolve(m, e, control = ctl)"))
   expect_false(states("rxSolve(m, e, 'addlKeepsCov')"))
@@ -777,7 +781,7 @@ test_that("least-squares matrix solves are not simulations even beside dosing ro
 
 # --- what counts as stating the setting, end to end ---------------------------------
 
-test_that("the setting must be in the call or its control, and a variable counts", {
+test_that("the setting must be in the call or its control; a variable counts for addlKeepsCov only", {
   skip_if_not_installed("rxode2")
   flagged <- function(args) {
     res <- lagged_one(sprintf("sim <- rxode2::rxSolve(mod, ev, %s)", args))
@@ -785,10 +789,11 @@ test_that("the setting must be in the call or its control, and a variable counts
   }
   for (args in c("foo(addlKeepsCov = TRUE)", "foo(nonmem = TRUE)",
                  "addlKeepsCov = NULL", "nonmem = NULL", "nonmem = FALSE",
+                 "nonmem = nm", "control = rxControl(nonmem = nm)",
                  "control = ctl", "control = foo(nonmem = TRUE)")) {
     expect_true(flagged(args), info = args)
   }
-  for (args in c("addlKeepsCov = keep", "nonmem = nm", "nonmem = T",
+  for (args in c("addlKeepsCov = keep", "nonmem = T",
                  "control = list(addlKeepsCov = TRUE)",
                  "control = rxControl(nonmem = TRUE)", "rxControl(addlKeepsCov = FALSE)")) {
     expect_false(flagged(args), info = args)

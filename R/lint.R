@@ -161,9 +161,9 @@
   else ""
 }
 
-# addlKeepsCov counts as stated unless it is NULL; nonmem counts unless it is
-# NULL or a literal FALSE. A variable counts: it is an explicit statement even
-# though its value cannot be read here.
+# addlKeepsCov counts as stated unless it is NULL: the author addressed it
+# directly, so a variable counts too. nonmem counts only as a literal TRUE (or
+# T): it sets addlKeepsCov only when it is TRUE, and a variable may hold FALSE.
 .lintArgsState <- function(args) {
   nms <- names(args)
   if (is.null(nms)) nms <- rep("", length(args))
@@ -172,9 +172,7 @@
   any(!vapply(keeps, is.null, logical(1L))) ||
     any(vapply(nonmem, .lintNonmemOn, logical(1L)))
 }
-.lintNonmemOn <- function(v) {
-  !(is.null(v) || identical(v, FALSE) || identical(v, quote(F)))
-}
+.lintNonmemOn <- function(v) isTRUE(v) || identical(v, quote(T))
 
 # Whether an argument is an rxControl() call, or a list() given as `control =`,
 # whose own arguments state the setting.
@@ -711,12 +709,14 @@
 #' Chunks with `eval = FALSE` are skipped.
 #'
 #' *What counts as stating the setting.* `addlKeepsCov =` with any value but
-#' `NULL`, or `nonmem =` with anything but `NULL` or a literal `FALSE`, among
-#' the call's own arguments or inside an `rxControl()` (or `control = list()`)
-#' argument. A variable counts, since it states the setting. Arguments of other
-#' nested calls do not: `foo(addlKeepsCov = TRUE)` inside an `rxSolve()` call is
-#' `foo`'s argument. `control = ctl`, with `ctl` defined elsewhere, is not
-#' followed.
+#' `NULL` (a variable counts: the author addressed `addlKeepsCov` itself), or a
+#' literal `nonmem = TRUE` (or `T`), among the call's own arguments or inside an
+#' `rxControl()` (or `control = list()`) argument. `nonmem` counts only as a
+#' literal `TRUE`, because it sets `addlKeepsCov` only when it is `TRUE` and a
+#' variable may hold `FALSE`; `nonmem = FALSE`, `NULL` and `nonmem = flag` do not
+#' count. Arguments of other nested calls do not count either:
+#' `foo(addlKeepsCov = TRUE)` inside an `rxSolve()` call is `foo`'s argument.
+#' `control = ctl`, with `ctl` defined elsewhere, is not followed.
 #'
 #' *Reported as not verifiable* (unless the call itself states the setting):
 #' `nlmixr2(..., est = "rxSolve")`, or an `est` that is not a literal;
