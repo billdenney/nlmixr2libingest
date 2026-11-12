@@ -274,7 +274,7 @@
 # from base::solve() on a matrix: a solve() call is a simulation when an
 # argument traces to a model. The tracked state lives in an environment `acc`:
 #   sites       every place the model is solved (see .lintWalkSolves());
-#   models      the literal names given to readModelDb();
+#   models      the literal names given to readModelDb() or modellib();
 #   modelnames  names known to hold a model (and the model's library name);
 #   containers  names known to hold a list of models;
 #   eventnames  names known to hold an event table, or a function that builds one;
@@ -291,7 +291,7 @@
 
 # Functions that return a model whatever their arguments, functions that return
 # their first argument's model modified, and the event-table builders.
-.lintModelMakers <- c("readModelDb", "rxode2", "rxode")
+.lintModelMakers <- c("readModelDb", "modellib", "rxode2", "rxode")
 .lintModelWrappers <- c("model", "ini", "zeroRe", "rxFixPop", "rxRmIni",
                         "rxAppendModel", "suppressMessages", "suppressWarnings",
                         "invisible", "(")
@@ -641,7 +641,7 @@
       !is.null(acc$ctx) && !identical(kind, "rxSolve")) {
     .lintAddPending(x, id, acc)
   }
-  if (identical(nm, "readModelDb") && length(args) >= 1L && is.character(args[[1L]])) {
+  if (nm %in% c("readModelDb", "modellib") && length(args) >= 1L && is.character(args[[1L]])) {
     acc$models <- c(acc$models, args[[1L]])
     acc$modelnames <- union(acc$modelnames, args[[1L]])
   }
@@ -723,7 +723,7 @@
 # parse but mentions a solver is recorded in acc$unparsed rather than skipped,
 # because a solve that cannot be read cannot be shown to state the setting; a
 # bare solve( counts as a solver only when the article also works with a model
-# (readModelDb() or the model's name), since solve() is mostly matrix algebra.
+# (readModelDb(), modellib() or the model's name), since solve() is mostly matrix algebra.
 # A chunk with eval = FALSE does not run and is skipped.
 .lintScanSolves <- function(chunks, known = character()) {
   acc <- new.env(parent = emptyenv())
@@ -739,7 +739,7 @@
   acc$ctx <- NULL
   acc$unparsed <- character()
   all_text <- unlist(chunks, use.names = FALSE)
-  uses_model <- any(grepl("readModelDb", all_text, fixed = TRUE)) ||
+  uses_model <- any(grepl("readModelDb|modellib", all_text)) ||
     any(vapply(known, function(k) any(grepl(k, all_text, fixed = TRUE)), logical(1L)))
   solver <- if (uses_model) "rxSolve|simulate\\s*\\(|nlmixr2?\\s*\\(|\\bsolve\\s*\\("
             else "rxSolve|simulate\\s*\\(|nlmixr2?\\s*\\("
@@ -815,9 +815,9 @@
         "addlkeepscov-unverifiable", "warning",
         paste0("cannot verify `", s$text, "`: it looks like a simulation (solve() ",
                "with event-table-like arguments) but no argument traces to a model ",
-               "(a name assigned from readModelDb() or rxode2(), or a model()/ini() ",
+               "(a name assigned from readModelDb(), modellib() or rxode2(), or a model()/ini() ",
                "pipe of one), and ", what, why),
-        "assign the model from readModelDb() or rxode2() and solve it by that name, or put addlKeepsCov = / nonmem = TRUE in this call, and say in the article which you chose")
+        "assign the model from readModelDb(), modellib() or rxode2() and solve it by that name, or put addlKeepsCov = / nonmem = TRUE in this call, and say in the article which you chose")
     } else {
       iss[[length(iss) + 1L]] <- .lintIssue(
         "addlkeepscov-unverifiable", "warning",
@@ -859,15 +859,15 @@
 #' and an option line that comes after code.
 #'
 #' **The model.** The `model` argument when given, else the literal names the
-#' article passes to `readModelDb()`. The `cmt =` rule and the lagged-dose rule
+#' article passes to `readModelDb()` or `modellib()`. The `cmt =` rule and the lagged-dose rule
 #' both read it; a model that is named but cannot be read is reported
 #' (`cmt-observable-model`, `addlkeepscov-model`) rather than skipped, but only
 #' when the article has something the rule would check (a `cmt =` string, a
-#' simulation). With neither a model argument nor a `readModelDb()` literal, no
+#' simulation). With neither a model argument nor a `readModelDb()` or `modellib()` literal, no
 #' model is known and those rules do not apply. A model given only as the
 #' `model` argument is not a tracked name in the article: `solve(Some_Model, ev)`
 #' is not recognised unless the article also passes `"Some_Model"` to
-#' `readModelDb()`.
+#' `readModelDb()` or `modellib()`.
 #'
 #' **Lagged-dose bioavailability.** When the model has an `alag()` statement
 #' and an `f()` whose right-hand side depends on a covariate (directly, through
@@ -883,7 +883,7 @@
 #' `rxSolve.default`, native or magrittr pipes, arguments over several lines).
 #' `solve()` and the methods rxode2 registers (`solve.rxUi()` and the others)
 #' count when an argument traces to a model through the article's assignments: a
-#' name assigned from `readModelDb()`, `rxode2()` or `rxode()`; a `model()` /
+#' name assigned from `readModelDb()`, `modellib()`, `rxode2()` or `rxode()`; a `model()` /
 #' `ini()` / `zeroRe()` pipe of one; the `$ui` of one; an element (`$`, `[[`) of
 #' a list of models, including one built by `lapply()`, `purrr::map()` or
 #' `setNames()` over their names; the loop variable of a `for` loop over such a
@@ -921,7 +921,7 @@
 #' a `solve()` with event-table-like arguments (an `et()` call, a data frame of
 #' dosing records, a function that builds one, `atol =`, `params =`, ...) but no
 #' traceable model; and a chunk that mentions a solver but does not parse (a
-#' bare `solve(` counts only when the article also uses `readModelDb()` or the
+#' bare `solve(` counts only when the article also uses `readModelDb()`, `modellib()` or the
 #' model's name).
 #'
 #' *Not resolved and not reported.* Only two forms are silent whatever the
@@ -951,7 +951,8 @@
 #' @param rmd Path to the vignette `.Rmd`.
 #' @param model Optional `rxUi` / model function / `nlmixr2lib` name; enables the
 #'   algebraic-observable `cmt =` check and the lagged-dose check. Both fall back
-#'   to the names the vignette passes to `readModelDb()` when no model is given.
+#'   to the names the vignette passes to `readModelDb()` or `modellib()` when no
+#'   model is given.
 #' @param max_per_arm Maximum simulated participants per arm (default 200).
 #' @return An `nli_vignette_lint` list with `issues` (data frame) and `n`.
 #' @export

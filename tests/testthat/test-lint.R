@@ -1211,3 +1211,34 @@ test_that("a model that cannot be read is reported by the cmt-observable rule, q
                                        "sim <- rxSolve(mod, ev)")))
   expect_setequal(res$issues$check, c("cmt-observable-model", "addlkeepscov-model"))
 })
+
+# --- modellib() is a model loader too ------------------------------------------------
+
+test_that("modellib() resolves a model the way readModelDb() does", {
+  skip_if_not_installed("rxode2")
+  for (code in c('mod <- modellib("Some_Model")', 'mod <- nlmixr2lib::modellib("Some_Model")',
+                 'mod <- rxode2::rxode2(modellib("Some_Model"))',
+                 'mods <- lapply(c("A", "B"), modellib)')) {
+    pre <- if (grepl("^mods", code)) c(code, "mod <- mods[[1]]") else code
+    expect_identical(lagged_checks_of(c(pre, "sim <- solve(mod, ev)")), "addlkeepscov-unstated",
+                     info = code)
+  }
+  # its literal name is a tracked name, and enough to treat a bare solve( as model work
+  expect_identical(lagged_checks_of(c('x <- modellib("Some_Model")', "sim <- solve(Some_Model, ev)")),
+                   "addlkeepscov-unstated")
+  expect_identical(lagged_checks_of(c('x <- modellib("Some_Model")', "x <- solve(mod, (ev")),
+                   "addlkeepscov-unverifiable")
+})
+
+test_that("the model is taken from modellib() in the article when none is given", {
+  skip_if_not_installed("rxode2")
+  skip_if_not_installed("nlmixr2lib")
+  skip_if_not("Hughes_2022_brepocitinib" %in% nlmixr2lib::modeldb$name)
+  rmd <- write_article(c('mod <- rxode2::rxode2(modellib("Hughes_2022_brepocitinib"))',
+                         "sim <- rxode2::rxSolve(mod, ev)"))
+  res <- lint_vignette(rmd)
+  expect_identical(lagged_checks(res), "addlkeepscov-unstated")
+  expect_match(res$issues$message, "covariate(s) DOSE_HIGH, FED_HIGHFAT.", fixed = TRUE)
+  gone <- write_article(c('mod <- modellib("No_Such_Model_9999")', "sim <- rxode2::rxSolve(mod, ev)"))
+  expect_identical(lint_vignette(gone)$issues$check, "addlkeepscov-model")
+})

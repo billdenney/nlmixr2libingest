@@ -11,7 +11,8 @@ lint_vignette(rmd, model = NULL, max_per_arm = 200L)
 
 \item{model}{Optional \code{rxUi} / model function / \code{nlmixr2lib} name; enables the
 algebraic-observable \verb{cmt =} check and the lagged-dose check. Both fall back
-to the names the vignette passes to \code{readModelDb()} when no model is given.}
+to the names the vignette passes to \code{readModelDb()} or \code{modellib()} when no
+model is given.}
 
 \item{max_per_arm}{Maximum simulated participants per arm (default 200).}
 }
@@ -40,15 +41,15 @@ chunk's leading \verb{#|} lines. Not honoured: \code{eval = c(FALSE)}, \code{eva
 and an option line that comes after code.
 
 \strong{The model.} The \code{model} argument when given, else the literal names the
-article passes to \code{readModelDb()}. The \verb{cmt =} rule and the lagged-dose rule
+article passes to \code{readModelDb()} or \code{modellib()}. The \verb{cmt =} rule and the lagged-dose rule
 both read it; a model that is named but cannot be read is reported
 (\code{cmt-observable-model}, \code{addlkeepscov-model}) rather than skipped, but only
 when the article has something the rule would check (a \verb{cmt =} string, a
-simulation). With neither a model argument nor a \code{readModelDb()} literal, no
+simulation). With neither a model argument nor a \code{readModelDb()} or \code{modellib()} literal, no
 model is known and those rules do not apply. A model given only as the
 \code{model} argument is not a tracked name in the article: \code{solve(Some_Model, ev)}
 is not recognised unless the article also passes \code{"Some_Model"} to
-\code{readModelDb()}.
+\code{readModelDb()} or \code{modellib()}.
 
 \strong{Lagged-dose bioavailability.} When the model has an \code{alag()} statement
 and an \code{f()} whose right-hand side depends on a covariate (directly, through
@@ -64,7 +65,7 @@ every form the rule can read, and to list here what it cannot.
 \code{rxSolve.default}, native or magrittr pipes, arguments over several lines).
 \code{solve()} and the methods rxode2 registers (\code{solve.rxUi()} and the others)
 count when an argument traces to a model through the article's assignments: a
-name assigned from \code{readModelDb()}, \code{rxode2()} or \code{rxode()}; a \code{model()} /
+name assigned from \code{readModelDb()}, \code{modellib()}, \code{rxode2()} or \code{rxode()}; a \code{model()} /
 \code{ini()} / \code{zeroRe()} pipe of one; the \verb{$ui} of one; an element (\code{$}, \code{[[}) of
 a list of models, including one built by \code{lapply()}, \code{purrr::map()} or
 \code{setNames()} over their names; the loop variable of a \code{for} loop over such a
@@ -102,7 +103,7 @@ rxSolve-only argument, since \code{lapply(matrices, solve)} is matrix algebra;
 a \code{solve()} with event-table-like arguments (an \code{et()} call, a data frame of
 dosing records, a function that builds one, \verb{atol =}, \verb{params =}, ...) but no
 traceable model; and a chunk that mentions a solver but does not parse (a
-bare \verb{solve(} counts only when the article also uses \code{readModelDb()} or the
+bare \verb{solve(} counts only when the article also uses \code{readModelDb()}, \code{modellib()} or the
 model's name).
 
 \emph{Not resolved and not reported.} Only two forms are silent whatever the
