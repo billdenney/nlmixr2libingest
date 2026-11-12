@@ -179,17 +179,119 @@
   .lintTrunc(paste(deparse(x, width.cutoff = 500L), collapse = " "), width)
 }
 
+# --- telling a model solve from base::solve() ---------------------------------
+#
+# rxode2 gives solve() a method for models (solve(mod, events), the same
+# computation as rxSolve()), but base::solve() on a matrix is the commonest use
+# of the name, so a solve() call counts as a simulation only when an argument
+# traces to a model. Names are tracked through the article's assignments, in
+# document order, in acc$modelnames (names known to hold a model) and
+# acc$eventnames (names known to hold an event table).
+
+# Functions that return a model whatever their arguments, functions that return
+# their first argument's model modified, and the event-table builders.
+.lintModelMakers <- c("readModelDb", "rxode2", "rxode")
+.lintModelWrappers <- c("model", "ini", "zeroRe", "rxFixPop", "rxRmIni",
+                        "rxAppendModel", "suppressMessages", "suppressWarnings",
+                        "invisible", "(")
+.lintEventMakers <- c("et", "eventTable", "etRep", "etSeq", "etExpand",
+                      "add.dosing", "add.sampling")
+# Arguments of rxSolve() that base::solve() (a, b, tol) does not have.
+.lintSolveArgs <- c("events", "params", "inits", "nSub", "nsub", "nStud", "nstud",
+                    "omega", "sigma", "thetaMat", "dfSub", "dfObs", "atol",
+                    "rtol", "keep", "cores", "seed", "returnType",
+                    "addlKeepsCov", "nonmem")
+
+# `lhs %>% f(args)` is `f(lhs, args)`, or `f(args)` with lhs where a bare `.` is
+# an argument; magrittr pipes are rewritten so they resolve like the native pipe
+# the parser has already rewritten.
+.lintIsPipe <- function(x) {
+  is.call(x) && length(x) == 3L && identical(x[[1L]], quote(`%>%`))
+}
+.lintDePipe <- function(x) {
+  lhs <- x[[2L]]
+  rhs <- x[[3L]]
+  if (!is.call(rhs)) return(as.call(list(rhs, lhs)))
+  args <- as.list(rhs)[-1L]
+  placeholder <- vapply(args, identical, logical(1L), quote(.))
+  args <- if (any(placeholder)) replace(args, placeholder, list(lhs)) else c(list(lhs), args)
+  as.call(c(list(rhs[[1L]]), args))
+}
+
+# TRUE when `x` evaluates to a model: a name or string already known to hold
+# one (including a model's literal library name), a readModelDb()/rxode2()/
+# rxode() call, or a model()/ini()/zeroRe()/... call on one.
+.lintIsModel <- function(x, acc) {
+  if (.lintIsPipe(x)) x <- .lintDePipe(x)
+  if (is.symbol(x) || is.character(x)) {
+    return(length(x) == 1L && as.character(x) %in% acc$modelnames)
+  }
+  if (!is.call(x)) return(FALSE)
+  nm <- .lintCallName(x)
+  if (nm %in% .lintModelMakers) return(TRUE)
+  # an event table built on a model, et(mod, ...), still carries the model
+  if ((nm %in% .lintModelWrappers || nm %in% .lintEventMakers) && length(x) >= 2L) {
+    return(.lintIsModel(x[[2L]], acc))
+  }
+  FALSE
+}
+
+# TRUE when `x` visibly builds or holds an event table: an et()-family call, a
+# dosing-record column (amt = / evid =), or a name already known to hold one
+# (which covers a user function whose body builds event rows).
+.lintMentionsEvents <- function(x, acc) {
+  if (.lintIsPipe(x)) x <- .lintDePipe(x)
+  if (is.symbol(x)) return(as.character(x) %in% acc$eventnames)
+  if (!is.call(x)) return(FALSE)
+  parts <- as.list(x)
+  nms <- names(parts)
+  if (is.null(nms)) nms <- rep("", length(parts))
+  if (.lintCallName(x) %in% .lintEventMakers || any(nms %in% c("amt", "evid"))) {
+    return(TRUE)
+  }
+  any(vapply(parts, .lintMentionsEvents, logical(1L), acc = acc))
+}
+
+# Classify a solve() call: "rxSolve" when an argument is a model (so it is a
+# simulation whose arguments can be read like rxSolve()'s); "solve-unresolved"
+# when no argument is a model but the call has event-table-like arguments or
+# rxSolve-only arguments (a simulation we cannot trace, never to be passed
+# silently); NA when it looks like base::solve() on a matrix.
+.lintSolveKind <- function(x, acc) {
+  args <- as.list(x)[-1L]
+  if (any(vapply(args, .lintIsModel, logical(1L), acc = acc))) return("rxSolve")
+  if (any(vapply(args, .lintMentionsEvents, logical(1L), acc = acc)) ||
+      any(names(args) %in% .lintSolveArgs)) {
+    return("solve-unresolved")
+  }
+  NA_character_
+}
+
+# Note what a name is assigned from, for later solve() calls.
+.lintRecordAssignment <- function(name, rhs, acc) {
+  if (.lintIsModel(rhs, acc)) {
+    acc$modelnames <- union(acc$modelnames, name)
+  } else if (.lintMentionsEvents(rhs, acc)) {
+    acc$eventnames <- union(acc$eventnames, name)
+  }
+  invisible(NULL)
+}
+
 # Walk parsed article code and record into `acc`:
 #   acc$sites   every place the model is solved: kind "rxSolve" (a call to
-#               rxSolve, however spelled or piped -- the native pipe is
-#               already rewritten to a plain call by the parser), "est-rxSolve"
-#               (nlmixr2(..., est = "rxSolve")), "simulate" (simulate()), or
+#               rxSolve, or to solve() on a model, however spelled or piped --
+#               the native pipe is already rewritten to a plain call by the
+#               parser), "est-rxSolve" (nlmixr2(..., est = "rxSolve")),
+#               "simulate" (simulate()), "solve-unresolved" (solve() that looks
+#               like a simulation but whose model cannot be traced), or
 #               "indirect" (rxSolve handed to another function, as in
 #               do.call(rxSolve, args)); `stated` says whether the call itself
 #               names the setting;
-#   acc$models  the literal names given to readModelDb().
-# Only a rxSolve() call can be checked argument by argument; the others pass
-# their arguments on in ways static code cannot follow.
+#   acc$models  the literal names given to readModelDb();
+#   acc$modelnames / acc$eventnames  names known to hold a model / event table
+#               (see .lintIsModel()), grown by assignments as the walk goes.
+# Only a rxSolve() or model solve() call can be checked argument by argument;
+# the others pass their arguments on in ways static code cannot follow.
 .lintWalkSolves <- function(x, acc) {
   if (is.pairlist(x)) {
     lapply(as.list(x), .lintWalkSolves, acc = acc)
@@ -203,10 +305,15 @@
     return(invisible(NULL))
   }
   if (!is.call(x)) return(invisible(NULL))
+  if (.lintIsPipe(x)) x <- .lintDePipe(x)
   nm <- .lintCallName(x)
   parts <- as.list(x)
+  if (nm %in% c("<-", "=") && length(parts) == 3L && is.symbol(parts[[2L]])) {
+    .lintRecordAssignment(as.character(parts[[2L]]), parts[[3L]], acc)
+  }
   is_rxsolve_chr <- vapply(parts[-1L], identical, logical(1L), "rxSolve")
   kind <- if (identical(nm, "rxSolve")) "rxSolve"
+          else if (identical(nm, "solve")) .lintSolveKind(x, acc)
           else if (nm %in% c("nlmixr2", "nlmixr") && any(is_rxsolve_chr)) "est-rxSolve"
           else if (identical(nm, "simulate")) "simulate"
           else if (nm %in% c("do.call", "match.fun", "get", "getExportedValue") &&
@@ -221,6 +328,7 @@
   if (identical(nm, "readModelDb") && length(parts) >= 2L &&
       is.character(parts[[2L]])) {
     acc$models <- c(acc$models, parts[[2L]])
+    acc$modelnames <- union(acc$modelnames, parts[[2L]])
   }
   # The function position is not walked when it is a plain name or pkg::name:
   # the name itself is not a reference to rxSolve as a value.
@@ -232,10 +340,12 @@
 # Scan the chunks for the places the model is solved. A chunk that does not
 # parse but mentions a solver is recorded in acc$unparsed rather than skipped,
 # because a solve that cannot be read cannot be shown to state the setting.
-.lintScanSolves <- function(chunks) {
+.lintScanSolves <- function(chunks, known = character()) {
   acc <- new.env(parent = emptyenv())
   acc$sites <- list()
   acc$models <- character()
+  acc$modelnames <- known
+  acc$eventnames <- character()
   acc$unparsed <- character()
   for (ch in chunks) {
     txt <- paste(ch, collapse = "\n")
@@ -261,7 +371,8 @@
 # cannot apply. A model that is named but cannot be parsed is reported, never
 # skipped: a silent skip is how an unchecked article looks like a checked one.
 .lintLaggedDose <- function(chunks, model) {
-  scan <- .lintScanSolves(chunks)
+  known <- if (is.character(model) && length(model) == 1L) model else character()
+  scan <- .lintScanSolves(chunks, known)
   if (!length(scan$sites) && !length(scan$unparsed)) return(list())
   srcs <- if (is.null(model)) as.list(scan$models) else list(model)
   if (!length(srcs)) return(list())
@@ -298,6 +409,14 @@
         paste0("`", s$text, "` states neither addlKeepsCov nor nonmem = TRUE, but ",
                what, why),
         "add addlKeepsCov = TRUE (NONMEM) or addlKeepsCov = FALSE (rxode2 default), or nonmem = TRUE, to this call, and say in the article which you chose")
+    } else if (s$kind == "solve-unresolved") {
+      iss[[length(iss) + 1L]] <- .lintIssue(
+        "addlkeepscov-unverifiable", "warning",
+        paste0("cannot verify `", s$text, "`: it looks like a simulation (solve() ",
+               "with event-table-like arguments) but no argument traces to a model ",
+               "(a name assigned from readModelDb() or rxode2(), or a model()/ini() ",
+               "pipe of one), and ", what, why),
+        "assign the model from readModelDb() or rxode2() and solve it by that name, or put addlKeepsCov = / nonmem = TRUE in this call, and say in the article which you chose")
     } else {
       iss[[length(iss) + 1L]] <- .lintIssue(
         "addlkeepscov-unverifiable", "warning",
@@ -332,10 +451,15 @@
 #' `f()` covariates at the dose's arrival time, whereas NONMEM uses the dose
 #' record's covariates, and the two differ when the covariate changes between
 #' occasions. `rxSolve()` calls are recognised however they are written
-#' (`rxode2::rxSolve()`, piped, arguments over several lines). A simulation run
-#' through `nlmixr2(..., est = "rxSolve")`, `simulate()`, or an `rxSolve` passed
-#' to another function cannot be read statically and is reported as not
-#' verifiable unless the call itself names the setting.
+#' (`rxode2::rxSolve()`, piped, arguments over several lines), and so is rxode2's
+#' `solve(model, ...)`: a `solve()` call counts as a simulation when an argument
+#' is a model (a name assigned from `readModelDb()` or `rxode2()`, a
+#' `model()` / `ini()` / `zeroRe()` pipe of one, or the model's library name),
+#' so `base::solve()` on a matrix is left alone. A simulation run through
+#' `nlmixr2(..., est = "rxSolve")`, `simulate()`, an `rxSolve` passed to another
+#' function, or a `solve()` with event-table-like arguments but no traceable
+#' model cannot be read statically and is reported as not verifiable unless the
+#' call itself names the setting.
 #'
 #' @param rmd Path to the vignette `.Rmd`.
 #' @param model Optional `rxUi` / model function / `nlmixr2lib` name; enables the

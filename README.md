@@ -71,9 +71,10 @@ API — but never reimplements model **validation**, which stays in
   the expensive render, so they are fixed without a render round-trip. It also
   requires every `rxSolve()` call to state `addlKeepsCov =` or `nonmem = TRUE`
   when the model has `alag()` and an `f()` that depends on a covariate (rxode2
-  and NONMEM read a lagged dose's covariates at different records); simulations
-  through `nlmixr2(est = "rxSolve")` or `simulate()` are reported as not
-  verifiable.
+  and NONMEM read a lagged dose's covariates at different records; rxode2's
+  `solve(model, ...)` counts, `base::solve()` on a matrix does not); simulations
+  through `nlmixr2(est = "rxSolve")` or `simulate()`, or a `solve()` whose model
+  cannot be traced, are reported as not verifiable.
   High-precision (numeric `amt` subscripts and non-PKNCA filters are not flagged);
   a prior, not a gate. CLI: `inst/scripts/lint_vignette.R`.
 - **Naming pre-brief** — `naming_prebrief()` resolves a paper's covariates (and

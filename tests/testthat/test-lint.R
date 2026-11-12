@@ -357,3 +357,131 @@ test_that("without a model argument the model is taken from readModelDb() in the
                           "sim <- rxode2::rxSolve(mod, ev)"))
   expect_identical(lint_vignette(gone)$issues$check, "addlkeepscov-model")
 })
+
+# --- solve(): rxode2's model method versus base::solve() ----------------------
+
+test_that(".lintDePipe rewrites a magrittr pipe the way magrittr evaluates it", {
+  expect_identical(.lintDePipe(quote(a %>% f(b))), quote(f(a, b)))
+  expect_identical(.lintDePipe(quote(a %>% f(b, .))), quote(f(b, a)))
+  expect_identical(.lintDePipe(quote(a %>% f)), quote(f(a)))
+  expect_identical(.lintDePipe(quote(a %>% f(x = 1))), quote(f(a, x = 1)))
+  # a chain is rewritten one pipe at a time, outermost first
+  expect_identical(.lintDePipe(quote(a %>% f() %>% g())), quote(g(a %>% f())))
+})
+
+test_that("base::solve() on a matrix is not a simulation", {
+  skip_if_not_installed("rxode2")
+  rmd <- write_article(c(
+    "A <- matrix(c(2, 1, 1, 3), 2)",
+    "inv <- solve(A)",
+    "x <- solve(A, c(1, 2))",
+    "y <- solve(chol(A), t(A), tol = 1e-10)",
+    "ev <- eigen(A)",
+    "w <- solve(ev$vectors, c(amt, 0, 0))",
+    "z <- z %*% solve(chol(cov(z)))"))
+  res <- lint_vignette(rmd, model = make_lag_model())
+  expect_identical(res$n, 0L)
+})
+
+test_that("a model solve() without the setting is flagged, however the model is reached", {
+  skip_if_not_installed("rxode2")
+  mod <- make_lag_model()
+  flagged <- function(code) {
+    res <- lint_vignette(write_article(code), model = mod)
+    list(checks = lagged_checks(res), msg = res$issues$message)
+  }
+  from_db <- 'mod <- readModelDb("Some_Model")'
+  # the model object itself, wrapped in rxode2() or rxode()
+  for (code in list(
+    c('mod <- rxode2::rxode2(readModelDb("Some_Model"))', "sim <- solve(mod, ev)"),
+    c(from_db, "ui <- rxode2::rxode(mod)", "sim <- solve(ui, ev)"),
+    # a model()/ini() pipe of one, native and magrittr, and wrapped
+    c(from_db, "m2 <- mod |> model({ a <- 1 })", "sim <- solve(m2, ev)"),
+    c(from_db, "m2 <- mod %>% ini(lka = 1) %>% zeroRe()", "sim <- solve(m2, ev)"),
+    c(from_db, "m2 <- suppressMessages(mod |> model({ a <- 1 }))", "sim <- solve(m2, ev)"),
+    c(from_db, "m2 <- rxode2::zeroRe(mod)", "sim <- solve(m2, ev)"),
+    # the model as the second argument of a piped event table
+    c(from_db, "sim <- ev |> solve(mod)"),
+    c(from_db, "sim <- mod %>% et(amt = 100) %>% solve()"),
+    # nested in a pipeline, and its literal library name
+    c(from_db, "sim <- solve(mod, ev) |> dplyr::mutate(arm = 1)"),
+    "sim <- solve(Some_Model, ev, nSub = 3)"
+  )) {
+    # the literal-name form needs the name registered by a readModelDb() literal
+    if (!any(grepl("readModelDb", code))) code <- c(from_db, code)
+    got <- flagged(code)
+    expect_identical(got$checks, "addlkeepscov-unstated", info = paste(code, collapse = " / "))
+    expect_match(got$msg, "solve(", fixed = TRUE)
+    expect_match(got$msg, "covariate(s) FED.", fixed = TRUE)
+  }
+  one <- flagged(c(from_db, "sim <- solve(mod, ev)"))
+  expect_match(one$msg, "`solve(mod, ev)` states neither addlKeepsCov nor nonmem = TRUE",
+               fixed = TRUE)
+})
+
+test_that("a model solve() that states the setting passes", {
+  skip_if_not_installed("rxode2")
+  mod <- make_lag_model()
+  for (arg in c("addlKeepsCov = TRUE", "addlKeepsCov = FALSE", "nonmem = TRUE")) {
+    rmd <- write_article(c('mod <- readModelDb("Some_Model")',
+                           sprintf("sim <- solve(mod, ev, %s)", arg)))
+    expect_identical(lint_vignette(rmd, model = mod)$n, 0L, info = arg)
+  }
+})
+
+test_that("each solve() is judged on its own, beside matrix solves", {
+  skip_if_not_installed("rxode2")
+  rmd <- write_article(c(
+    'mod <- readModelDb("Some_Model")',
+    "a <- solve(mod, ev)",
+    "inv <- solve(matrix(c(2, 1, 1, 3), 2))",
+    "b <- solve(mod, ev, addlKeepsCov = TRUE)",
+    "c <- rxode2::rxSolve(mod, ev)"))
+  res <- lint_vignette(rmd, model = make_lag_model())
+  expect_identical(lagged_checks(res), rep("addlkeepscov-unstated", 2L))
+  expect_match(res$issues$message[[1L]], "`solve(mod, ev)`", fixed = TRUE)
+  expect_match(res$issues$message[[2L]], "`rxode2::rxSolve(mod, ev)`", fixed = TRUE)
+})
+
+test_that("a solve() whose model cannot be traced is not verifiable, never silently passed", {
+  skip_if_not_installed("rxode2")
+  mod <- make_lag_model()
+  checks <- function(code) lagged_checks(lint_vignette(write_article(code), model = mod))
+  # event-table-like arguments: an et() call, a name holding one, a data frame
+  # of dosing records, a user function that builds event rows, rxSolve-only
+  # arguments such as atol / params
+  expect_identical(checks("sim <- solve(other, rxode2::et(amt = 100))"),
+                   "addlkeepscov-unverifiable")
+  expect_identical(checks(c("ev <- rxode2::et(amt = 100)", "sim <- solve(get_model(), ev)")),
+                   "addlkeepscov-unverifiable")
+  expect_identical(
+    checks(c("pk_ev <- rbind(data.frame(id = 1L, time = 0, amt = 100, evid = 1L),",
+             "              data.frame(id = 1L, time = 1:3, amt = 0, evid = 0L))",
+             "sim <- solve(pk_ev)")),
+    "addlkeepscov-unverifiable")
+  expect_identical(
+    checks(c("obs_rows <- function(id, times) data.frame(id = id, time = times, evid = 0L)",
+             "sim <- solve(obs_rows(1L, 1:3))")),
+    "addlkeepscov-unverifiable")
+  expect_identical(checks("sim <- solve(thing, atol = 1e-10, rtol = 1e-8)"),
+                   "addlkeepscov-unverifiable")
+  expect_identical(checks("sim <- solve(thing, params = p)"),
+                   "addlkeepscov-unverifiable")
+  # a call that names the setting is verified, so it passes
+  expect_identical(checks("sim <- solve(thing, params = p, addlKeepsCov = TRUE)"),
+                   character())
+  # nothing event-table-like, and no model: base::solve()
+  expect_identical(checks("x <- solve(thing)"), character())
+  expect_identical(checks("x <- solve(thing, other)"), character())
+})
+
+test_that("the model's library name counts as a model, and a solve() of it is flagged", {
+  skip_if_not_installed("rxode2")
+  skip_if_not_installed("nlmixr2lib")
+  skip_if_not("Hughes_2022_brepocitinib" %in% nlmixr2lib::modeldb$name)
+  rmd <- write_article("sim <- solve(Hughes_2022_brepocitinib, ev)")
+  res <- lint_vignette(rmd, model = "Hughes_2022_brepocitinib")
+  expect_identical(lagged_checks(res), "addlkeepscov-unstated")
+  # with no model name known, the same call is a base::solve() on an unknown
+  expect_identical(lint_vignette(rmd)$n, 0L)
+})
