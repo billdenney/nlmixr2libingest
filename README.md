@@ -74,9 +74,12 @@ API — but never reimplements model **validation**, which stays in
   `f()` that depends on a covariate, because rxode2 and NONMEM read a lagged
   dose's covariates at different records. That rule resolves or reports every
   form it can read -- simulations it cannot trace are reported as not
-  verifiable -- and lists what it cannot in `?lint_vignette`. The rules are
-  best-effort pre-checks: a clean lint is a prior, not a guarantee, and does not
-  replace the render gate. CLI: `inst/scripts/lint_vignette.R`.
+  verifiable -- and lists what it cannot in `?lint_vignette`. The text rules
+  ignore comments, and the `cmt =` and lagged-dose rules read the model named by
+  the `model` argument or, failing that, by the article's own `readModelDb()`
+  calls, and report a model they cannot read. The rules are best-effort
+  pre-checks: a clean lint is a prior, not a guarantee, and does not replace the
+  render gate. CLI: `inst/scripts/lint_vignette.R`.
 - **Naming pre-brief** — `naming_prebrief()` resolves a paper's covariates (and
   optionally parameters/compartments) to canonical names *once*, up front, so the
   agent ingests one small report instead of loading the ~136k-token register or

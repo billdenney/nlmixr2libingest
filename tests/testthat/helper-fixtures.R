@@ -114,3 +114,46 @@ new_acc <- function(modelnames = character(), containers = character(),
   acc$unparsed <- character()
   acc
 }
+
+# --- helpers for the lagged-dose tests ------------------------------------------
+
+# The lagged-dose findings of a lint result.
+lagged_checks <- function(res) {
+  res$issues$check[grepl("^addlkeepscov", res$issues$check)]
+}
+
+# lint_vignette() of an article holding `code`, with `model` as the model.
+lagged_one <- function(code, model = make_lag_model(), ...) {
+  lint_vignette(write_article(code, ...), model = model)
+}
+
+# The lagged-dose findings for an article holding `code`.
+lagged_checks_of <- function(code, model = make_lag_model()) {
+  lagged_checks(lagged_one(code, model))
+}
+
+# How many findings are "addlkeepscov-unstated".
+count_unstated <- function(code, model = make_lag_model()) {
+  sum(lagged_checks_of(code, model) == "addlkeepscov-unstated")
+}
+
+# TRUE when the only finding is "addlkeepscov-unverifiable".
+is_unverifiable <- function(code, model = make_lag_model()) {
+  identical(lagged_checks_of(code, model), "addlkeepscov-unverifiable")
+}
+
+# TRUE when rxSolve(mod, ev, <args>) is the only finding, as "addlkeepscov-unstated".
+rx_unstated <- function(args) {
+  identical(lagged_checks_of(sprintf("sim <- rxode2::rxSolve(mod, ev, %s)", args)),
+            "addlkeepscov-unstated")
+}
+
+# The covariates the f() statements of a lag-model variant depend on.
+lag_covs <- function(...) {
+  .lintLaggedFCovariates(rxode2::rxode2(make_lag_model(...)))
+}
+
+# Whether one call's text states the setting.
+call_states <- function(code) {
+  .lintCallStates(parse(text = code, keep.source = FALSE)[[1L]])
+}

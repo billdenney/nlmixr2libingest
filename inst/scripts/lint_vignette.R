@@ -11,8 +11,9 @@
 #     <vignette.Rmd>   path to the validation vignette
 #     [model]          nlmixr2lib model name or path to its .R (enables the
 #                      algebraic-observable cmt= check and the lagged-dose
-#                      addlKeepsCov check; the latter falls back to the names
-#                      the vignette passes to readModelDb())
+#                      addlKeepsCov check; both fall back to the names the
+#                      vignette passes to readModelDb(), and report a model
+#                      they cannot read)
 #     --max-per-arm N  per-arm simulation cap (default 200)
 
 args <- commandArgs(trailingOnly = TRUE)

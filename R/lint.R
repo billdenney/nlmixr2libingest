@@ -8,44 +8,91 @@
 # best-effort PRE-check -- it does not replace the render gate, and a clean lint
 # does not guarantee a clean render.
 
-# The R code of each ```{r ...} chunk of an Rmd, one character vector per
-# chunk (chunks are parsed separately so one that does not parse cannot hide
-# the others). A chunk that does not run -- `eval = FALSE` in its header or
-# `#| eval: false` in its body -- carries attr(, "eval") = FALSE.
+# The chunk fences knitr recognises in markdown (knitr::all_patterns$md): an
+# optional indent of spaces, tabs and `>`, three or more backticks, and for the
+# opening fence an engine name and options in braces. Copied rather than read
+# from knitr, which is only a Suggests.
+.lintChunkBegin <- "^[\t >]*```+\\s*\\{([a-zA-Z0-9_]+( *[ ,].*)?)\\}\\s*$"
+.lintChunkEnd <- "^[\t >]*```+\\s*$"
+
+# Whether a chunk header turns evaluation off: a literal eval = FALSE (or F)
+# among the options, outside any quoted string. Not honoured: eval = c(FALSE),
+# eval = !TRUE, eval = <variable>, and a document-wide
+# knitr::opts_chunk$set(eval = FALSE).
+.lintHeaderNoEval <- function(options) {
+  unquoted <- gsub("\"[^\"]*\"|'[^']*'", "", options)
+  grepl("(^|[ ,])eval\\s*=\\s*(FALSE|F)\\s*(,|$)", unquoted)
+}
+
+# The R code of each R chunk of an Rmd, one character vector per chunk (chunks
+# are parsed separately so one that does not parse cannot hide the others).
+# Fences are matched as knitr matches them, so an indented or four-backtick
+# chunk is read; chunks of other engines are not. A chunk that does not run --
+# `eval = FALSE` in its header, or `#| eval: false` / `#| eval = FALSE` among
+# its leading `#|` option lines -- carries attr(, "eval") = FALSE.
 .lintRchunks <- function(rmd) {
   lines <- readLines(rmd, warn = FALSE)
   inchunk <- FALSE
+  is_r <- FALSE
+  indent <- ""
+  leading <- FALSE
   chunks <- list()
   skip <- logical()
   for (ln in lines) {
-    if (grepl("^```\\{[rR]", ln)) {
-      inchunk <- TRUE
-      chunks[[length(chunks) + 1L]] <- character()
-      skip <- c(skip, grepl("eval\\s*=\\s*(FALSE|F)\\b", ln))
+    if (!inchunk) {
+      if (grepl(.lintChunkBegin, ln)) {
+        inchunk <- TRUE
+        options <- sub(.lintChunkBegin, "\\1", ln)
+        is_r <- grepl("^[rR]($|[ ,])", options)
+        indent <- sub("```.*$", "", ln)
+        leading <- TRUE
+        if (is_r) {
+          chunks[[length(chunks) + 1L]] <- character()
+          skip <- c(skip, .lintHeaderNoEval(options))
+        }
+      }
       next
     }
-    if (inchunk && grepl("^```\\s*$", ln)) { inchunk <- FALSE; next }
-    if (inchunk) {
-      i <- length(chunks)
-      chunks[[i]] <- c(chunks[[i]], ln)
-      if (grepl("^#\\|\\s*eval:\\s*(false|FALSE)\\s*$", ln)) skip[[i]] <- TRUE
+    if (grepl(.lintChunkEnd, ln)) { inchunk <- FALSE; next }
+    if (!is_r) next
+    if (nzchar(indent) && startsWith(ln, indent)) ln <- substring(ln, nchar(indent) + 1L)
+    i <- length(chunks)
+    chunks[[i]] <- c(chunks[[i]], ln)
+    if (leading && grepl("^#\\|", ln)) {
+      if (grepl("^#\\|\\s*eval\\s*[:=]\\s*(false|False|FALSE|F)\\s*$", ln)) skip[[i]] <- TRUE
+    } else {
+      leading <- FALSE
     }
   }
   for (i in which(skip)) attr(chunks[[i]], "eval") <- FALSE
   chunks
 }
 
-# Extract the R code from ```{r ...} chunks of an Rmd.
-.lintRcode <- function(rmd) {
-  as.character(unlist(.lintRchunks(rmd), use.names = FALSE))
+# One chunk's code with its comments blanked, so that a rule matching text sees
+# only what runs. Comments are found from the parse data, which knows a `#` in
+# a string from a comment; code that does not parse falls back to dropping
+# everything from the first `#` not preceded by a backslash.
+.lintStripComments <- function(code) {
+  if (!length(code)) return(code)
+  pd <- tryCatch(utils::getParseData(parse(text = code, keep.source = TRUE)),
+                 error = function(e) NULL)
+  if (is.null(pd)) return(sub("(^|[^\\\\])#.*$", "\\1", code, perl = TRUE))
+  comments <- pd[pd$token == "COMMENT", , drop = FALSE]
+  for (i in seq_len(nrow(comments))) {
+    ln <- comments$line1[[i]]
+    code[[ln]] <- substr(code[[ln]], 1L, comments$col1[[i]] - 1L)
+  }
+  code
+}
+
+# The code of all R chunks, comments removed.
+.lintCode <- function(chunks) {
+  as.character(unlist(lapply(chunks, .lintStripComments), use.names = FALSE))
 }
 
 # Algebraic observables: prediction variables that are not ODE compartment
 # states (e.g. `Cc <- central / vc; Cc ~ prop(.)`). Best-effort via rxUi.
-.lintObservables <- function(model) {
-  if (is.null(model)) return(character())
-  ui <- tryCatch(.stAsUi(model), error = function(e) NULL)
-  if (is.null(ui)) return(character())
+.lintObservables <- function(ui) {
   tryCatch({
     pd <- ui$predDf
     nm <- if (is.data.frame(pd) && "var" %in% names(pd)) pd$var
@@ -54,6 +101,21 @@
     st <- tryCatch(as.character(ui$state), error = function(e) character())
     unique(setdiff(as.character(nm), st))
   }, error = function(e) character())
+}
+
+# Read each model source (a library name, a function, an rxUi): one list per
+# source with `ui` (NULL when it could not be read) and `error`. rxode2 prints
+# its syntax errors, which would bury the lint output.
+.lintReadModels <- function(srcs) {
+  lapply(srcs, function(src) {
+    ui <- NULL
+    err <- tryCatch({
+      utils::capture.output(suppressMessages(ui <- .stAsUi(src)), type = "output")
+      NULL
+    }, error = function(e) conditionMessage(e))
+    list(label = if (is.character(src)) paste0("`", src, "`") else "the supplied model",
+         ui = ui, error = err)
+  })
 }
 
 .lintIssue <- function(check, severity, message, fix) {
@@ -217,10 +279,15 @@
 #   containers  names known to hold a list of models;
 #   eventnames  names known to hold an event table, or a function that builds one;
 #   funs        article-local functions: name -> list(params);
+#   topfuns     names the article defines as top-level functions, which shadow
+#               the base and rxode2 functions of the same name;
+#   toplevel    the top-level expression being walked;
 #   pending     solve() calls inside a local function on one of its parameters,
 #               resolved when the function is called with a model;
 #   ctx         the local function being walked, if any;
 #   unparsed    chunks that mention a solver but do not parse.
+# A name that is assigned something else stops being tracked (see
+# .lintRecordAssignment()).
 
 # Functions that return a model whatever their arguments, functions that return
 # their first argument's model modified, and the event-table builders.
@@ -233,7 +300,17 @@
 # Calls whose result is an event table when one of their arguments is, as in
 # rbind(dosing_rows, obs_rows) or do.call(rbind, lapply(ids, obs_rows)).
 .lintEventCombinators <- c("rbind", "bind_rows", "do.call", "lapply", "(")
-.lintApplyFamily <- c("lapply", "sapply", "vapply", "Map", "mapply", "map", "walk")
+# Calls that keep a list of models a list of models.
+.lintContainerWrappers <- c("setNames", "unname", "rev", "head", "tail")
+# Calls that run a function over a list, binding its parameter to each element.
+.lintApplyFamily <- c("lapply", "sapply", "vapply", "Map", "mapply", "map",
+                      "map2", "pmap", "imap", "walk", "walk2", "pwalk", "iwalk")
+.lintIsApply <- function(nm) nm %in% .lintApplyFamily || grepl("^map_", nm)
+# The solve() methods rxode2 registers, which rxode2:::solve.rxUi(mod, ev) and the
+# like call by name.
+.lintSolveMethods <- paste0("solve.", c("rxUi", "rxode2", "function", "rxEt",
+                                        "rxParams", "rxSolve"))
+.lintIsSolveName <- function(nm) nm == "solve" || nm %in% .lintSolveMethods
 # Arguments of rxSolve() that base::solve() (a, b, tol) does not have.
 .lintSolveArgs <- c("events", "params", "inits", "nSub", "nsub", "nStud", "nstud",
                     "omega", "sigma", "thetaMat", "dfSub", "dfObs", "atol",
@@ -241,12 +318,14 @@
                     "addlKeepsCov", "nonmem")
 # Calls that mention rxSolve without using it.
 .lintInert <- c("?", "help", "args", "formals", "body", "environment")
+.lintPipes <- c("%>%", "%T>%", "%<>%", "%!>%")
 
 # `lhs %>% f(args)` is `f(lhs, args)`, or `f(args)` with lhs where a bare `.` is
 # an argument; magrittr pipes are rewritten so they resolve like the native pipe
 # the parser has already rewritten.
 .lintIsPipe <- function(x) {
-  is.call(x) && length(x) == 3L && identical(x[[1L]], quote(`%>%`))
+  is.call(x) && length(x) == 3L && is.symbol(x[[1L]]) &&
+    as.character(x[[1L]]) %in% .lintPipes
 }
 .lintDePipe <- function(x) {
   lhs <- x[[2L]]
@@ -258,8 +337,19 @@
   as.call(c(list(rhs[[1L]]), args))
 }
 
+# TRUE when `a` is a function (or purrr ~ lambda) whose value is a model, as in
+# function(n) readModelDb(n).
+.lintReturnsModel <- function(a, acc) {
+  if (!is.call(a)) return(FALSE)
+  nm <- .lintCallName(a)
+  (identical(nm, "function") && .lintIsModel(a[[3L]], acc)) ||
+    (identical(nm, "~") && length(a) == 2L && .lintIsModel(a[[2L]], acc))
+}
+
 # TRUE when `x` is a list of models: a name known to hold one, a list()/c() with
-# a model (or a list of models) in it, or lapply(names, readModelDb).
+# a model (or a list of models) in it, an apply-family call that builds models
+# (lapply(names, readModelDb), lapply(names, function(n) readModelDb(n))), or
+# setNames()/rev()/... of one.
 .lintIsContainer <- function(x, acc) {
   if (.lintIsPipe(x)) x <- .lintDePipe(x)
   if (is.symbol(x)) return(as.character(x) %in% acc$containers)
@@ -270,9 +360,13 @@
     return(any(vapply(args, function(a) .lintIsModel(a, acc) || .lintIsContainer(a, acc),
                       logical(1L))))
   }
-  if (nm %in% .lintApplyFamily) {
-    return(any(vapply(args, function(a) is.symbol(a) && as.character(a) %in% .lintModelMakers,
-                      logical(1L))))
+  if (nm %in% .lintContainerWrappers && length(args) >= 1L) {
+    return(.lintIsContainer(args[[1L]], acc))
+  }
+  if (.lintIsApply(nm)) {
+    return(any(vapply(args, function(a) {
+      (is.symbol(a) && as.character(a) %in% .lintModelMakers) || .lintReturnsModel(a, acc)
+    }, logical(1L))))
   }
   FALSE
 }
@@ -289,6 +383,7 @@
   if (!is.call(x)) return(FALSE)
   nm <- .lintCallName(x)
   if (nm %in% .lintModelMakers) return(TRUE)
+  if (identical(nm, "{") && length(x) >= 2L) return(.lintIsModel(x[[length(x)]], acc))
   if (nm %in% c("$", "[[") && length(x) == 3L) {
     if (.lintIsContainer(x[[2L]], acc)) return(TRUE)
     return(nm == "$" && identical(x[[3L]], quote(ui)) && .lintIsModel(x[[2L]], acc))
@@ -343,6 +438,17 @@
 # TRUE when `a` is the name `s` or the string "s".
 .lintIsRef <- function(a, s) identical(a, s) || identical(a, as.name(s))
 
+# TRUE when `a` refers to rxSolve as a value: the name, pkg::name, or -- when
+# `strings` -- the string (do.call("rxSolve", ...), match.fun("rxSolve")).
+.lintIsRxSolveRef <- function(a, strings) {
+  for (s in c("rxSolve", "rxSolve.default")) {
+    if (is.symbol(a) && identical(a, as.name(s))) return(TRUE)
+    if (strings && identical(a, s)) return(TRUE)
+    if (.lintIsNsCall(a) && identical(as.character(a[[3L]]), s)) return(TRUE)
+  }
+  FALSE
+}
+
 # TRUE when `x` is a literal string, or c() of literal strings.
 .lintIsLiteralChr <- function(x) {
   is.character(x) ||
@@ -367,15 +473,19 @@
   NA_character_
 }
 
-# rxSolve or solve handed to another function as a value. rxSolve by string
-# (do.call("rxSolve", ...)) is always reported; solve is also an ordinary
-# matrix function, so it is reported only when match.fun()/get() fetch it by
-# name, or when it travels with a model, a list of models, an event table or an
-# rxSolve-only argument (lapply(list(mod), solve, ev), do.call(solve, list(mod, ev))).
+# rxSolve or solve handed to another function as a value. rxSolve (name,
+# pkg::name, or the string given to do.call()/match.fun()/get()) is always
+# reported; solve is also an ordinary matrix function, so it is reported only
+# when match.fun()/get() fetch it by name, or when it travels with a model, a
+# list of models, an event table or an rxSolve-only argument
+# (lapply(list(mod), solve, ev), do.call(solve, list(mod, ev))). A `solve` the
+# article defines at top level is its own function and is not looked for.
 .lintIndirectKind <- function(nm, args, acc) {
+  # obj$solve and pkg::solve name a member; they do not hand a function over
+  if (nm %in% c("$", "@", "::", ":::")) return(NA_character_)
   fetch <- nm %in% c("do.call", "match.fun", "get", "getExportedValue")
-  if (fetch && any(vapply(args, identical, logical(1L), "rxSolve"))) return("indirect")
-  if ("solve" %in% names(acc$funs)) return(NA_character_)
+  if (any(vapply(args, .lintIsRxSolveRef, logical(1L), strings = fetch))) return("indirect")
+  if ("solve" %in% acc$topfuns) return(NA_character_)
   if (nm %in% c("match.fun", "get", "getExportedValue") &&
       any(vapply(args, identical, logical(1L), "solve"))) {
     return("indirect")
@@ -389,22 +499,55 @@
   if (travels) "indirect" else NA_character_
 }
 
+# Whether an indirect call states the setting: as for a direct call, and also
+# in a list() or c() among its arguments (do.call(rxSolve, list(mod, ev,
+# addlKeepsCov = TRUE))).
+.lintIndirectStates <- function(x) {
+  args <- as.list(x)[-1L]
+  .lintCallStates(x) || any(vapply(args, function(a) {
+    is.call(a) && .lintCallName(a) %in% c("list", "c") &&
+      .lintArgsState(as.list(a)[-1L])
+  }, logical(1L)))
+}
+
+# The text of a `control =` argument that is not an rxControl() or list() call
+# (a variable, say), so that the setting inside it cannot be read; NA otherwise.
+.lintOpaqueControl <- function(x) {
+  args <- as.list(x)[-1L]
+  nms <- names(args)
+  if (is.null(nms)) nms <- rep("", length(args))
+  for (a in args[nms == "control"]) {
+    if (!(is.call(a) && .lintCallName(a) %in% c("rxControl", "list"))) {
+      return(.lintCallText(a, 40L))
+    }
+  }
+  NA_character_
+}
+
 # Record a place the model is solved; returns its position in acc$sites.
-.lintAddSite <- function(acc, kind, stated, text) {
+.lintAddSite <- function(acc, kind, stated, text, opaque = NA_character_) {
   id <- length(acc$sites) + 1L
-  acc$sites[[id]] <- list(kind = kind, stated = stated, text = text)
+  acc$sites[[id]] <- list(kind = kind, stated = stated, text = text, opaque = opaque)
   id
 }
 
-# Note what a name is assigned from, for later solve() calls.
+# Note what a name is assigned from, for later solve() calls. A name assigned
+# something that is none of a model, a list of models or an event table stops
+# being tracked -- unless the new value is built from the name itself, as in
+# ev <- ev[order(ev$id), ].
 .lintRecordAssignment <- function(name, rhs, acc) {
-  if (.lintIsModel(rhs, acc)) {
-    acc$modelnames <- union(acc$modelnames, name)
-  } else if (.lintIsContainer(rhs, acc)) {
-    acc$containers <- union(acc$containers, name)
-  } else if (.lintIsEvents(rhs, acc)) {
-    acc$eventnames <- union(acc$eventnames, name)
-  }
+  kind <- if (.lintIsModel(rhs, acc)) "model"
+          else if (.lintIsContainer(rhs, acc)) "container"
+          else if (.lintIsEvents(rhs, acc)) "events"
+          else if (name %in% all.vars(rhs)) "same"
+          else "none"
+  if (identical(kind, "same")) return(invisible(NULL))
+  acc$modelnames <- setdiff(acc$modelnames, name)
+  acc$containers <- setdiff(acc$containers, name)
+  acc$eventnames <- setdiff(acc$eventnames, name)
+  if (identical(kind, "model")) acc$modelnames <- c(acc$modelnames, name)
+  if (identical(kind, "container")) acc$containers <- c(acc$containers, name)
+  if (identical(kind, "events")) acc$eventnames <- c(acc$eventnames, name)
   invisible(NULL)
 }
 
@@ -450,8 +593,9 @@
   invisible(NULL)
 }
 
-# Names that hold a model only inside this call: with(list(m = mod), ...), and
-# the parameter of a function mapped over a list of models.
+# Names that hold a model only inside this call: with(list(m = mod), ...), the
+# parameter of a function mapped over a list of models (lapply, purrr, ...), and
+# the variable of foreach(m = models) %do% ....
 .lintScopedModels <- function(nm, args, acc) {
   if (identical(nm, "with") && length(args) >= 2L && is.call(args[[1L]]) &&
       identical(.lintCallName(args[[1L]]), "list")) {
@@ -460,7 +604,14 @@
     if (is.null(bn)) bn <- rep("", length(bound))
     return(bn[nzchar(bn) & vapply(bound, .lintIsModel, logical(1L), acc = acc)])
   }
-  if (nm %in% .lintApplyFamily && any(vapply(args, .lintIsContainer, logical(1L), acc = acc))) {
+  if (nm %in% c("%do%", "%dopar%") && length(args) >= 1L && is.call(args[[1L]]) &&
+      identical(.lintCallName(args[[1L]]), "foreach")) {
+    iter <- as.list(args[[1L]])[-1L]
+    bn <- names(iter)
+    if (is.null(bn)) bn <- rep("", length(iter))
+    return(bn[nzchar(bn) & vapply(iter, .lintIsContainer, logical(1L), acc = acc)])
+  }
+  if (.lintIsApply(nm) && any(vapply(args, .lintIsContainer, logical(1L), acc = acc))) {
     out <- character()
     for (f in args[vapply(args, function(a) is.call(a) &&
                             .lintCallName(a) %in% c("function", "~"), logical(1L))]) {
@@ -474,19 +625,20 @@
 # Record the places `x` solves the model, and what its assignments teach us.
 .lintVisitCall <- function(x, nm, acc) {
   args <- as.list(x)[-1L]
-  local_solve <- "solve" %in% names(acc$funs)
+  local_solve <- "solve" %in% acc$topfuns
   kind <- if (nm %in% c("rxSolve", "rxSolve.default")) "rxSolve"
-          else if (identical(nm, "solve") && !local_solve) .lintSolveKind(x, acc)
+          else if (.lintIsSolveName(nm) && !(identical(nm, "solve") && local_solve)) .lintSolveKind(x, acc)
           else if (nm %in% c("nlmixr2", "nlmixr")) .lintEstKind(args)
           else if (identical(nm, "simulate")) "simulate"
           else .lintIndirectKind(nm, args, acc)
   id <- NA_integer_
   if (!is.na(kind)) {
-    id <- .lintAddSite(acc, kind, kind != "indirect" && .lintCallStates(x),
-                       .lintCallText(x))
+    stated <- if (identical(kind, "indirect")) .lintIndirectStates(x) else .lintCallStates(x)
+    id <- .lintAddSite(acc, kind, stated, .lintCallText(x),
+                       if (kind %in% c("rxSolve", "solve-unresolved")) .lintOpaqueControl(x) else NA_character_)
   }
-  if (identical(nm, "solve") && !local_solve && !is.null(acc$ctx) &&
-      !identical(kind, "rxSolve")) {
+  if (.lintIsSolveName(nm) && !(identical(nm, "solve") && local_solve) &&
+      !is.null(acc$ctx) && !identical(kind, "rxSolve")) {
     .lintAddPending(x, id, acc)
   }
   if (identical(nm, "readModelDb") && length(args) >= 1L && is.character(args[[1L]])) {
@@ -532,6 +684,7 @@
     return(invisible(NULL))
   }
   if (!is.call(x)) return(invisible(NULL))
+  is_top <- identical(x, acc$toplevel)
   if (.lintIsPipe(x)) x <- .lintDePipe(x)
   nm <- .lintCallName(x)
   if (nm %in% .lintInert) return(invisible(NULL))
@@ -543,6 +696,7 @@
       .lintRecordAssignment(as.character(lhs), rhs, acc)
       if (is.call(rhs) && identical(.lintCallName(rhs), "function")) {
         acc$funs[[as.character(lhs)]] <- list(params = names(rhs[[2L]]))
+        if (is_top) acc$topfuns <- union(acc$topfuns, as.character(lhs))
         .lintWalkFunction(rhs, as.character(lhs), acc)
         return(invisible(NULL))
       }
@@ -555,9 +709,12 @@
   scoped <- setdiff(.lintScopedModels(nm, parts[-1L], acc), acc$modelnames)
   acc$modelnames <- c(acc$modelnames, scoped)
   # The function position is not walked when it is a plain name or pkg::name:
-  # the name itself is not a reference to rxSolve as a value.
+  # the name itself is not a reference to rxSolve as a value. An argument that
+  # is rxSolve itself was reported with its call (see .lintIndirectKind()).
   head_is_name <- is.symbol(parts[[1L]]) || .lintIsNsCall(parts[[1L]])
-  lapply(if (head_is_name) parts[-1L] else parts, .lintWalkSolves, acc = acc)
+  kids <- if (head_is_name) parts[-1L] else parts
+  kids <- kids[!vapply(kids, .lintIsRxSolveRef, logical(1L), strings = FALSE)]
+  lapply(kids, .lintWalkSolves, acc = acc)
   acc$modelnames <- setdiff(acc$modelnames, scoped)
   invisible(NULL)
 }
@@ -576,6 +733,8 @@
   acc$containers <- character()
   acc$eventnames <- character()
   acc$funs <- list()
+  acc$topfuns <- character()
+  acc$toplevel <- NULL
   acc$pending <- list()
   acc$ctx <- NULL
   acc$unparsed <- character()
@@ -592,7 +751,10 @@
       hit <- grep(solver, ch, value = TRUE)
       if (length(hit)) acc$unparsed <- c(acc$unparsed, .lintTrunc(hit[[1L]], 60L))
     } else {
-      lapply(as.list(ex), .lintWalkSolves, acc = acc)
+      for (e in as.list(ex)) {
+        acc$toplevel <- e
+        .lintWalkSolves(e, acc)
+      }
     }
   }
   list(sites = acc$sites, models = unique(acc$models), unparsed = acc$unparsed)
@@ -600,30 +762,26 @@
 
 # The rule: when the model has alag() and an f() that depends on a covariate,
 # every place the article solves the model must state addlKeepsCov or
-# nonmem = TRUE. Returns a list of .lintIssue() rows.
-#
-# The model is the `model` argument when given (a name, path-loaded function or
-# rxUi, exactly as the other model checks take it), else every literal name the
-# article passes to readModelDb(). With neither, no model is known and the rule
-# cannot apply. A model that is named but cannot be read -- parsed, or its
-# covariates and statements extracted -- is reported, never skipped: a silent
-# skip is how an unchecked article looks like a checked one.
-.lintLaggedDose <- function(chunks, model) {
-  known <- if (is.character(model) && length(model) == 1L) model else character()
-  scan <- .lintScanSolves(chunks, known)
+# nonmem = TRUE. `scan` is .lintScanSolves() of the article; `models` is
+# .lintReadModels() of the sources (the `model` argument, else the literal
+# names the article passes to readModelDb()). With neither, no model is known
+# and the rule cannot apply. A model that is named but cannot be read --
+# parsed, or its covariates and statements extracted -- is reported, never
+# skipped: a silent skip is how an unchecked article looks like a checked one.
+# Returns a list of .lintIssue() rows.
+.lintLaggedDose <- function(scan, models) {
   if (!length(scan$sites) && !length(scan$unparsed)) return(list())
-  srcs <- if (is.null(model)) as.list(scan$models) else list(model)
-  if (!length(srcs)) return(list())
+  if (!length(models)) return(list())
 
   iss <- list()
   covs <- character()
-  for (src in srcs) {
-    got <- tryCatch(.lintLaggedFCovariates(.stAsUi(src)), error = function(e) e)
+  for (m in models) {
+    got <- if (is.null(m$ui)) simpleError(m$error)
+           else tryCatch(.lintLaggedFCovariates(m$ui), error = function(e) e)
     if (inherits(got, "error")) {
-      label <- if (is.character(src)) paste0("`", src, "`") else "the supplied model"
       iss[[length(iss) + 1L]] <- .lintIssue(
         "addlkeepscov-model", "warning",
-        paste0("cannot read ", label, " (", .lintTrunc(conditionMessage(got), 80L),
+        paste0("cannot read ", m$label, " (", .lintTrunc(conditionMessage(got), 80L),
                "), so whether the article's simulations need addlKeepsCov (a model ",
                "with alag() and a covariate-dependent f()) was not checked"),
         "install rxode2 and nlmixr2lib, or pass the model's .R path as the second argument, so the model can be read")
@@ -642,11 +800,16 @@
   for (s in scan$sites) {
     if (s$stated) next
     if (s$kind == "rxSolve") {
+      lead <- if (is.na(s$opaque)) {
+        paste0("`", s$text, "` states neither addlKeepsCov nor nonmem = TRUE, but ")
+      } else {
+        paste0("`", s$text, "` does not state addlKeepsCov or nonmem = TRUE where it ",
+               "can be read: its control argument, `", s$opaque, "`, is a variable ",
+               "or call whose setting could not be read here, and ")
+      }
       iss[[length(iss) + 1L]] <- .lintIssue(
-        "addlkeepscov-unstated", "warning",
-        paste0("`", s$text, "` states neither addlKeepsCov nor nonmem = TRUE, but ",
-               what, why),
-        "add addlKeepsCov = TRUE (NONMEM) or addlKeepsCov = FALSE (rxode2 default), or nonmem = TRUE, to this call, and say in the article which you chose")
+        "addlkeepscov-unstated", "warning", paste0(lead, what, why),
+        "add addlKeepsCov = TRUE (NONMEM) or addlKeepsCov = FALSE (rxode2 default), or nonmem = TRUE, to this call (or inside rxControl() given as control =), and say in the article which you chose")
     } else if (s$kind == "solve-unresolved") {
       iss[[length(iss) + 1L]] <- .lintIssue(
         "addlkeepscov-unverifiable", "warning",
@@ -684,6 +847,28 @@
 #' state its lagged-dose covariate convention (see Details).
 #'
 #' @details
+#' **What is read.** The R chunks of the Rmd, found as knitr finds them: an
+#' indented, blockquoted or four-backtick fence is a chunk, and a chunk of
+#' another engine is not. Comments are removed before any text rule matches, so
+#' a commented-out call or an assertion quoted in a comment is not a finding.
+#' A chunk with `eval = FALSE` is not scanned by the lagged-dose rule (the text
+#' rules still read it): a literal `FALSE` or `F` among the header options
+#' outside quoted strings, or `#| eval: false` / `#| eval = FALSE` among the
+#' chunk's leading `#|` lines. Not honoured: `eval = c(FALSE)`, `eval = !TRUE`,
+#' `eval = <variable>`, a document-wide `knitr::opts_chunk$set(eval = FALSE)`,
+#' and an option line that comes after code.
+#'
+#' **The model.** The `model` argument when given, else the literal names the
+#' article passes to `readModelDb()`. The `cmt =` rule and the lagged-dose rule
+#' both read it; a model that is named but cannot be read is reported
+#' (`cmt-observable-model`, `addlkeepscov-model`) rather than skipped, but only
+#' when the article has something the rule would check (a `cmt =` string, a
+#' simulation). With neither a model argument nor a `readModelDb()` literal, no
+#' model is known and those rules do not apply. A model given only as the
+#' `model` argument is not a tracked name in the article: `solve(Some_Model, ev)`
+#' is not recognised unless the article also passes `"Some_Model"` to
+#' `readModelDb()`.
+#'
 #' **Lagged-dose bioavailability.** When the model has an `alag()` statement
 #' and an `f()` whose right-hand side depends on a covariate (directly, through
 #' intermediate assignments, or through an `if()` condition), every simulation
@@ -696,17 +881,22 @@
 #'
 #' *What counts as a simulation.* `rxSolve()` in any spelling (`rxode2::`,
 #' `rxSolve.default`, native or magrittr pipes, arguments over several lines).
-#' `solve()` counts when an argument traces to a model through the article's
-#' assignments: a name assigned from `readModelDb()`, `rxode2()` or `rxode()`;
-#' a `model()` / `ini()` / `zeroRe()` pipe of one; the `$ui` of one; an element
-#' (`$`, `[[`) of a list of models; the loop variable of a `for` loop over such
-#' a list, or the parameter of a function mapped over it by `lapply()` and the
-#' like; a `with(list(m = mod), ...)` binding; the model's library name. A
-#' `solve()` inside an article-local function on one of its parameters counts
-#' when the function is called with a model there, and is reported at the
-#' definition. `base::solve()` on a matrix is left alone, and so is a `solve()`
-#' the article defines itself (its own `rxSolve()` call is judged instead).
-#' Chunks with `eval = FALSE` are skipped.
+#' `solve()` and the methods rxode2 registers (`solve.rxUi()` and the others)
+#' count when an argument traces to a model through the article's assignments: a
+#' name assigned from `readModelDb()`, `rxode2()` or `rxode()`; a `model()` /
+#' `ini()` / `zeroRe()` pipe of one; the `$ui` of one; an element (`$`, `[[`) of
+#' a list of models, including one built by `lapply()`, `purrr::map()` or
+#' `setNames()` over their names; the loop variable of a `for` loop over such a
+#' list, the parameter of a function mapped over it (`lapply()`, the `purrr`
+#' `map` family, `walk()`, ...), or the variable of a `foreach()` loop; a
+#' `with(list(m = mod), ...)` binding; the model's library name. A `solve()`
+#' inside an article-local function on one of its parameters counts when the
+#' function is called with a model there, and is reported at the definition.
+#' `base::solve()` on a matrix is left alone, and so is a `solve()` the article
+#' defines itself at top level (its own `rxSolve()` call is judged instead; a
+#' definition inside a function or `local()` shadows nothing). A name assigned
+#' something that is not a model stops being one. `mod$simulate()` and
+#' `mod$solve()` are not rxode2 methods and are ignored.
 #'
 #' *What counts as stating the setting.* `addlKeepsCov =` with any value but
 #' `NULL` (a variable counts: the author addressed `addlKeepsCov` itself), or a
@@ -716,7 +906,11 @@
 #' variable may hold `FALSE`; `nonmem = FALSE`, `NULL` and `nonmem = flag` do not
 #' count. Arguments of other nested calls do not count either:
 #' `foo(addlKeepsCov = TRUE)` inside an `rxSolve()` call is `foo`'s argument.
-#' `control = ctl`, with `ctl` defined elsewhere, is not followed.
+#' `control = ctl`, with `ctl` defined elsewhere, is not followed; the finding
+#' says the setting could not be read there. For an indirect call
+#' (`do.call(rxSolve, list(mod, ev, addlKeepsCov = TRUE))`,
+#' `lapply(mods, solve, ev, nonmem = TRUE)`) the setting is looked for among its
+#' arguments and in a `list()` or `c()` among them.
 #'
 #' *Reported as not verifiable* (unless the call itself states the setting):
 #' `nlmixr2(..., est = "rxSolve")`, or an `est` that is not a literal;
@@ -728,15 +922,19 @@
 #' dosing records, a function that builds one, `atol =`, `params =`, ...) but no
 #' traceable model; and a chunk that mentions a solver but does not parse (a
 #' bare `solve(` counts only when the article also uses `readModelDb()` or the
-#' model's name). A model that is named but cannot be read is reported too.
+#' model's name).
 #'
-#' *Not resolved and not reported.* A model returned by a user function, built
-#' by `eval(parse())` or `getFromNamespace()`, or reached by a `for` loop over
-#' `readModelDb()` names; a model passed to a local function through
-#' `lapply()` or `do.call()` rather than called directly; `do.call(solve, args)`
-#' with `args` a bare name; a `solve()` whose model cannot be traced and whose
-#' arguments are not event-table-like (it is read as matrix algebra). Names are
-#' tracked across the whole article rather than per function.
+#' *Not resolved and not reported.* Only two forms are silent whatever the
+#' arguments: a call built from text (`eval(parse(text = ...))`) and one fetched
+#' by a name the rule cannot read (`getFromNamespace("rxSolve", "rxode2")(...)`).
+#' Others are reported only when their arguments are event-table-like, and are
+#' otherwise read as matrix algebra: a model returned by a user function; a
+#' model handed to a local function through `lapply()` or `do.call()` rather than
+#' called directly; `do.call(solve, args)` with `args` a bare name. A `solve()`
+#' whose model cannot be traced and whose arguments are not event-table-like is
+#' read as matrix algebra. Names are tracked across the whole article rather than
+#' per function. A record built inline with `amt =` or `evid =` counts as an
+#' event table even in `solve(rbind(amt = ..., time = ...))`.
 #'
 #' *Over-approximations* (reported although the rule may not apply, and cleared
 #' by stating the setting). `alag()` and `f()` are not tied to the same
@@ -746,13 +944,14 @@
 #' model without the hazard is reported when another model in the article has
 #' it. Covariates that never change between occasions (weight, sex) are
 #' reported like any other; stating `addlKeepsCov = FALSE` is the intended way
-#' to clear them.
+#' to clear them. A wrapper that forwards `...` into `rxSolve()` is reported at
+#' its definition even when every caller states the setting, since the setting
+#' cannot be seen flowing through.
 #'
 #' @param rmd Path to the vignette `.Rmd`.
 #' @param model Optional `rxUi` / model function / `nlmixr2lib` name; enables the
-#'   algebraic-observable `cmt =` check and the lagged-dose check. The
-#'   lagged-dose check falls back to the names the vignette passes to
-#'   `readModelDb()` when no model is given.
+#'   algebraic-observable `cmt =` check and the lagged-dose check. Both fall back
+#'   to the names the vignette passes to `readModelDb()` when no model is given.
 #' @param max_per_arm Maximum simulated participants per arm (default 200).
 #' @return An `nli_vignette_lint` list with `issues` (data frame) and `n`.
 #' @export
@@ -763,31 +962,56 @@ lint_vignette <- function(rmd, model = NULL, max_per_arm = 200L) {
                           "check the path"), n = 1L),
       class = "nli_vignette_lint"))
   }
-  code <- .lintRcode(rmd)
+  # The code of the R chunks with comments removed, so that a commented-out call
+  # or a comment that quotes an old assertion does not match a rule.
+  chunks <- .lintRchunks(rmd)
+  code <- .lintCode(chunks)
   blob <- paste(code, collapse = "\n")
   iss <- list()
+
+  # The models the model-dependent rules read: the `model` argument, else the
+  # literal names the article passes to readModelDb(). They are read once, and
+  # only when a rule needs them.
+  known <- if (is.character(model) && length(model) == 1L) model else character()
+  scan <- .lintScanSolves(chunks, known)
+  srcs <- if (is.null(model)) as.list(scan$models) else list(model)
+  has_cmt <- grepl("cmt\\s*=\\s*[\"']", blob)
+  has_solve <- length(scan$sites) > 0L || length(scan$unparsed) > 0L
+  models <- if (length(srcs) && (has_cmt || has_solve)) .lintReadModels(srcs) else list()
 
   # 1. Event table referencing an algebraic observable as a compartment.
   # Per the nlmixr2 convention, event-table `cmt=` must name an ODE STATE, never
   # an algebraic observable: referencing the observable makes rxode2 inject a
   # `cmt()` slot for it AFTER the ODE states, renumbering every compartment --
   # the most common slot-renumbering render failure. rxode2 computes the
-  # observable (e.g. `Cc <- central / vc`) at the state's observation rows.
-  obs <- .lintObservables(model)
-  if (length(obs)) {
-    used <- obs[vapply(obs, function(o)
-      grepl(sprintf("cmt\\s*=\\s*[\"']%s[\"']", o), blob), logical(1L))]
-    if (length(used)) {
-      states <- tryCatch(as.character(.stAsUi(model)$state),
-                         error = function(e) character())
-      rec <- if (length(states))
-        paste0("use an ODE state name instead (e.g. cmt='", states[[length(states)]], "')")
-      else "use the ODE state name instead"
-      iss[[length(iss) + 1L]] <- .lintIssue(
-        "cmt-observable", "warning",
-        paste0("event table references algebraic observable(s) ",
-               paste(used, collapse = ", "), " as a compartment via cmt="),
-        paste0(rec, " -- referencing an observable injects a cmt slot and renumbers compartments"))
+  # observable (e.g. `Cc <- central / vc`) at the state's observation rows. A
+  # model that cannot be read is reported, not skipped: without it the rule
+  # cannot tell an observable from a state.
+  if (has_cmt) {
+    for (m in models) {
+      if (is.null(m$ui)) {
+        iss[[length(iss) + 1L]] <- .lintIssue(
+          "cmt-observable-model", "warning",
+          paste0("cannot read ", m$label, " (", .lintTrunc(m$error, 80L),
+                 "), so whether an event table's cmt= names an algebraic ",
+                 "observable was not checked"),
+          "install rxode2 and nlmixr2lib, or pass the model's .R path as the second argument, so the model can be read")
+        next
+      }
+      obs <- .lintObservables(m$ui)
+      used <- obs[vapply(obs, function(o)
+        grepl(sprintf("cmt\\s*=\\s*[\"']%s[\"']", o), blob), logical(1L))]
+      if (length(used)) {
+        states <- tryCatch(as.character(m$ui$state), error = function(e) character())
+        rec <- if (length(states))
+          paste0("use an ODE state name instead (e.g. cmt='", states[[length(states)]], "')")
+        else "use the ODE state name instead"
+        iss[[length(iss) + 1L]] <- .lintIssue(
+          "cmt-observable", "warning",
+          paste0("event table references algebraic observable(s) ",
+                 paste(used, collapse = ", "), " as a compartment via cmt="),
+          paste0(rec, " -- referencing an observable injects a cmt slot and renumbers compartments"))
+      }
     }
   }
 
@@ -846,12 +1070,11 @@ lint_vignette <- function(rmd, model = NULL, max_per_arm = 200L) {
   simulates <- grepl("set.seed", blob, fixed = TRUE) &&
     grepl("rxSolve", blob, fixed = TRUE)
   if (simulates) {
-    # Match against CODE only. A correct fix documents the old assertion in a
-    # comment ("an earlier revision used `all(diff(pv) < 0)` ..."), and matching
-    # raw text would re-flag the very vignette that was just repaired -- a
-    # linter that fires on the fixed version teaches authors to ignore it.
-    codeonly <- sub("(^|[^\\\\])#.*$", "\\1", code, perl = TRUE)
-    cblob <- paste(codeonly, collapse = "\n")
+    # Match against CODE only (`blob` has its comments removed). A correct fix
+    # documents the old assertion in a comment ("an earlier revision used
+    # `all(diff(pv) < 0)` ..."), and matching raw text would re-flag the very
+    # vignette that was just repaired -- a linter that fires on the fixed
+    # version teaches authors to ignore it.
     frag <- list(
       c("assert-strict-monotone",
         # Compared against literal 0 only. `all(diff(x) < 0.25)` is a step
@@ -873,7 +1096,7 @@ lint_vignette <- function(rmd, model = NULL, max_per_arm = 200L) {
       # "near zero" from "clearly positive" needs the values, not the source.
     )
     for (f in frag) {
-      if (grepl(f[[2L]], cblob, perl = TRUE)) {
+      if (grepl(f[[2L]], blob, perl = TRUE)) {
         iss[[length(iss) + 1L]] <- .lintIssue(f[[1L]], "warning", f[[3L]], f[[4L]])
       }
     }
@@ -881,7 +1104,7 @@ lint_vignette <- function(rmd, model = NULL, max_per_arm = 200L) {
 
   # 6. Lagged-dose f() covariates: the solve must say which covariate
   #    convention it uses (see .lintLaggedDose()).
-  iss <- c(iss, .lintLaggedDose(.lintRchunks(rmd), model))
+  iss <- c(iss, .lintLaggedDose(scan, models))
 
   issues <- if (length(iss)) do.call(rbind, iss) else
     data.frame(check = character(), severity = character(),

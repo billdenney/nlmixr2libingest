@@ -10,9 +10,8 @@ lint_vignette(rmd, model = NULL, max_per_arm = 200L)
 \item{rmd}{Path to the vignette \code{.Rmd}.}
 
 \item{model}{Optional \code{rxUi} / model function / \code{nlmixr2lib} name; enables the
-algebraic-observable \verb{cmt =} check and the lagged-dose check. The
-lagged-dose check falls back to the names the vignette passes to
-\code{readModelDb()} when no model is given.}
+algebraic-observable \verb{cmt =} check and the lagged-dose check. Both fall back
+to the names the vignette passes to \code{readModelDb()} when no model is given.}
 
 \item{max_per_arm}{Maximum simulated participants per arm (default 200).}
 }
@@ -29,6 +28,28 @@ assertions that cannot hold across machines, and a simulation that does not
 state its lagged-dose covariate convention (see Details).
 }
 \details{
+\strong{What is read.} The R chunks of the Rmd, found as knitr finds them: an
+indented, blockquoted or four-backtick fence is a chunk, and a chunk of
+another engine is not. Comments are removed before any text rule matches, so
+a commented-out call or an assertion quoted in a comment is not a finding.
+A chunk with \code{eval = FALSE} is not scanned by the lagged-dose rule (the text
+rules still read it): a literal \code{FALSE} or \code{F} among the header options
+outside quoted strings, or \verb{#| eval: false} / \verb{#| eval = FALSE} among the
+chunk's leading \verb{#|} lines. Not honoured: \code{eval = c(FALSE)}, \code{eval = !TRUE},
+\verb{eval = <variable>}, a document-wide \code{knitr::opts_chunk$set(eval = FALSE)},
+and an option line that comes after code.
+
+\strong{The model.} The \code{model} argument when given, else the literal names the
+article passes to \code{readModelDb()}. The \verb{cmt =} rule and the lagged-dose rule
+both read it; a model that is named but cannot be read is reported
+(\code{cmt-observable-model}, \code{addlkeepscov-model}) rather than skipped, but only
+when the article has something the rule would check (a \verb{cmt =} string, a
+simulation). With neither a model argument nor a \code{readModelDb()} literal, no
+model is known and those rules do not apply. A model given only as the
+\code{model} argument is not a tracked name in the article: \code{solve(Some_Model, ev)}
+is not recognised unless the article also passes \code{"Some_Model"} to
+\code{readModelDb()}.
+
 \strong{Lagged-dose bioavailability.} When the model has an \code{alag()} statement
 and an \code{f()} whose right-hand side depends on a covariate (directly, through
 intermediate assignments, or through an \verb{if()} condition), every simulation
@@ -41,17 +62,22 @@ every form the rule can read, and to list here what it cannot.
 
 \emph{What counts as a simulation.} \code{rxSolve()} in any spelling (\verb{rxode2::},
 \code{rxSolve.default}, native or magrittr pipes, arguments over several lines).
-\code{solve()} counts when an argument traces to a model through the article's
-assignments: a name assigned from \code{readModelDb()}, \code{rxode2()} or \code{rxode()};
-a \code{model()} / \code{ini()} / \code{zeroRe()} pipe of one; the \verb{$ui} of one; an element
-(\code{$}, \code{[[}) of a list of models; the loop variable of a \code{for} loop over such
-a list, or the parameter of a function mapped over it by \code{lapply()} and the
-like; a \code{with(list(m = mod), ...)} binding; the model's library name. A
-\code{solve()} inside an article-local function on one of its parameters counts
-when the function is called with a model there, and is reported at the
-definition. \code{base::solve()} on a matrix is left alone, and so is a \code{solve()}
-the article defines itself (its own \code{rxSolve()} call is judged instead).
-Chunks with \code{eval = FALSE} are skipped.
+\code{solve()} and the methods rxode2 registers (\code{solve.rxUi()} and the others)
+count when an argument traces to a model through the article's assignments: a
+name assigned from \code{readModelDb()}, \code{rxode2()} or \code{rxode()}; a \code{model()} /
+\code{ini()} / \code{zeroRe()} pipe of one; the \verb{$ui} of one; an element (\code{$}, \code{[[}) of
+a list of models, including one built by \code{lapply()}, \code{purrr::map()} or
+\code{setNames()} over their names; the loop variable of a \code{for} loop over such a
+list, the parameter of a function mapped over it (\code{lapply()}, the \code{purrr}
+\code{map} family, \code{walk()}, ...), or the variable of a \code{foreach()} loop; a
+\code{with(list(m = mod), ...)} binding; the model's library name. A \code{solve()}
+inside an article-local function on one of its parameters counts when the
+function is called with a model there, and is reported at the definition.
+\code{base::solve()} on a matrix is left alone, and so is a \code{solve()} the article
+defines itself at top level (its own \code{rxSolve()} call is judged instead; a
+definition inside a function or \code{local()} shadows nothing). A name assigned
+something that is not a model stops being one. \code{mod$simulate()} and
+\code{mod$solve()} are not rxode2 methods and are ignored.
 
 \emph{What counts as stating the setting.} \verb{addlKeepsCov =} with any value but
 \code{NULL} (a variable counts: the author addressed \code{addlKeepsCov} itself), or a
@@ -61,7 +87,11 @@ literal \code{TRUE}, because it sets \code{addlKeepsCov} only when it is \code{T
 variable may hold \code{FALSE}; \code{nonmem = FALSE}, \code{NULL} and \code{nonmem = flag} do not
 count. Arguments of other nested calls do not count either:
 \code{foo(addlKeepsCov = TRUE)} inside an \code{rxSolve()} call is \code{foo}'s argument.
-\code{control = ctl}, with \code{ctl} defined elsewhere, is not followed.
+\code{control = ctl}, with \code{ctl} defined elsewhere, is not followed; the finding
+says the setting could not be read there. For an indirect call
+(\code{do.call(rxSolve, list(mod, ev, addlKeepsCov = TRUE))},
+\code{lapply(mods, solve, ev, nonmem = TRUE)}) the setting is looked for among its
+arguments and in a \code{list()} or \code{c()} among them.
 
 \emph{Reported as not verifiable} (unless the call itself states the setting):
 \code{nlmixr2(..., est = "rxSolve")}, or an \code{est} that is not a literal;
@@ -73,15 +103,19 @@ a \code{solve()} with event-table-like arguments (an \code{et()} call, a data fr
 dosing records, a function that builds one, \verb{atol =}, \verb{params =}, ...) but no
 traceable model; and a chunk that mentions a solver but does not parse (a
 bare \verb{solve(} counts only when the article also uses \code{readModelDb()} or the
-model's name). A model that is named but cannot be read is reported too.
+model's name).
 
-\emph{Not resolved and not reported.} A model returned by a user function, built
-by \code{eval(parse())} or \code{getFromNamespace()}, or reached by a \code{for} loop over
-\code{readModelDb()} names; a model passed to a local function through
-\code{lapply()} or \code{do.call()} rather than called directly; \code{do.call(solve, args)}
-with \code{args} a bare name; a \code{solve()} whose model cannot be traced and whose
-arguments are not event-table-like (it is read as matrix algebra). Names are
-tracked across the whole article rather than per function.
+\emph{Not resolved and not reported.} Only two forms are silent whatever the
+arguments: a call built from text (\code{eval(parse(text = ...))}) and one fetched
+by a name the rule cannot read (\code{getFromNamespace("rxSolve", "rxode2")(...)}).
+Others are reported only when their arguments are event-table-like, and are
+otherwise read as matrix algebra: a model returned by a user function; a
+model handed to a local function through \code{lapply()} or \code{do.call()} rather than
+called directly; \code{do.call(solve, args)} with \code{args} a bare name. A \code{solve()}
+whose model cannot be traced and whose arguments are not event-table-like is
+read as matrix algebra. Names are tracked across the whole article rather than
+per function. A record built inline with \verb{amt =} or \verb{evid =} counts as an
+event table even in \code{solve(rbind(amt = ..., time = ...))}.
 
 \emph{Over-approximations} (reported although the rule may not apply, and cleared
 by stating the setting). \code{alag()} and \code{f()} are not tied to the same
@@ -91,5 +125,7 @@ uses several models takes the union of their covariates, so a simulation of a
 model without the hazard is reported when another model in the article has
 it. Covariates that never change between occasions (weight, sex) are
 reported like any other; stating \code{addlKeepsCov = FALSE} is the intended way
-to clear them.
+to clear them. A wrapper that forwards \code{...} into \code{rxSolve()} is reported at
+its definition even when every caller states the setting, since the setting
+cannot be seen flowing through.
 }
