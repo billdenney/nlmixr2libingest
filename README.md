@@ -71,8 +71,11 @@ API — but never reimplements model **validation**, which stays in
   the expensive render, so they are fixed without a render round-trip. It also
   requires every simulation (`rxSolve()`, or rxode2's `solve(model, ...)`) to
   state `addlKeepsCov =` or `nonmem = TRUE` when the model has `alag()` and an
-  `f()` that depends on a covariate, because rxode2 and NONMEM read a lagged
-  dose's covariates at different records. That rule resolves or reports every
+  `f()` that depends on a covariate, because which record's covariates a lagged
+  dose's `f()` reads depends on the setting and the dose type (the robust
+  choice is `addlKeepsCov = FALSE` with every record carrying the covariates of
+  the dose that opened its interval; `TRUE` and `nonmem = TRUE` match NONMEM
+  only for bolus doses). That rule resolves or reports every
   form it can read -- simulations it cannot trace are reported as not
   verifiable -- and lists what it cannot in `?lint_vignette`. The text rules
   ignore comments, and the `cmt =` and lagged-dose rules read the model named by

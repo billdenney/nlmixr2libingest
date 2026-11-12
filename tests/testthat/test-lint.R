@@ -186,9 +186,56 @@ test_that("a lagged covariate-dependent f() without the setting is flagged", {
   msg <- res$issues$message
   expect_match(msg, "rxode2::rxSolve(mod, events = ev, nSub = 10)", fixed = TRUE)
   expect_match(msg, "covariate(s) FED.", fixed = TRUE)
-  expect_match(msg, "rxode2 reads a lagged dose's f() covariates at its arrival time by default (addlKeepsCov = FALSE).", fixed = TRUE)
-  expect_match(msg, "NONMEM uses the dose record's covariates (addlKeepsCov = TRUE).", fixed = TRUE)
-  expect_match(msg, "State the setting and say in the article which you chose.", fixed = TRUE)
+  expect_match(msg, "With alag(), which record supplies f()'s covariates depends on the setting and the dose type.", fixed = TRUE)
+  expect_match(msg, "By default (addlKeepsCov = FALSE) a bolus dose reads the record in force when it arrives", fixed = TRUE)
+  expect_match(msg, "an infusion (rate = -2 with dur(), or a fixed rate) reads its own record unless a co-timed record follows it.", fixed = TRUE)
+  expect_match(msg, "addlKeepsCov = TRUE and nonmem = TRUE read the dose record for a bolus, which is NONMEM's pairing, but the record before the dose for an infusion.", fixed = TRUE)
+  expect_match(msg, "Give every record the covariates of the dose that opened its interval, state addlKeepsCov = FALSE, and say in the article that you did.", fixed = TRUE)
+  expect_match(msg, "TRUE or nonmem = TRUE also passes this check, but matches NONMEM only for bolus doses.", fixed = TRUE)
+  # the setting is no longer called NONMEM's
+  expect_false(grepl("NONMEM uses", msg, fixed = TRUE))
+  expect_false(grepl("which you chose", msg, fixed = TRUE))
+})
+
+test_that("every lagged-dose finding recommends FALSE and says TRUE matches NONMEM only for bolus doses", {
+  skip_if_not_installed("rxode2")
+  # one article per way a finding is produced: an rxSolve() call that states
+  # nothing, one with a control argument that cannot be read, a solve() with no
+  # traceable model, a simulation without a readable call, and a chunk that
+  # does not parse
+  articles <- list(
+    unstated = list(
+      "sim <- rxode2::rxSolve(mod, events = ev)",
+      "add addlKeepsCov = FALSE to this call (or inside rxControl() given as control =); "),
+    control = list(
+      "sim <- rxode2::rxSolve(mod, events = ev, control = ctl)",
+      "state addlKeepsCov = FALSE in the call itself, or give control = rxControl(addlKeepsCov = FALSE) inline so it can be read; "),
+    unresolved = list(
+      "sim <- solve(thing, params = p)",
+      "assign the model from readModelDb(), modellib() or rxode2() and solve it by that name, or put addlKeepsCov = FALSE in this call; "),
+    unreadable = list(
+      'fit <- nlmixr2(mod, dat, est = "rxSolve")',
+      'solve with rxSolve() directly, or put addlKeepsCov = FALSE in this call (for nlmixr2(est = "rxSolve"), through rxControl()); '),
+    unparsed = list(
+      "sim <- rxSolve(mod, (ev",
+      "fix the chunk so it parses, then state addlKeepsCov = FALSE in each solve; "))
+  for (nm in names(articles)) {
+    iss <- lagged_one(articles[[nm]][[1L]])$issues
+    iss <- iss[grepl("^addlkeepscov", iss$check), ]
+    expect_identical(nrow(iss), 1L, info = nm)
+    expect_true(startsWith(iss$fix, articles[[nm]][[2L]]), info = nm)
+    expect_match(iss$fix, "give every record the covariates of the dose that opened its interval and say in the article that you did", fixed = TRUE, info = nm)
+    expect_match(iss$fix, "addlKeepsCov = TRUE or nonmem = TRUE also pass this check, but match NONMEM only for bolus doses", fixed = TRUE, info = nm)
+    expect_match(iss$message, "matches NONMEM only for bolus doses", fixed = TRUE, info = nm)
+    for (txt in c(iss$message, iss$fix)) {
+      expect_false(grepl("(NONMEM)", txt, fixed = TRUE), info = nm)
+      expect_false(grepl("NONMEM uses", txt, fixed = TRUE), info = nm)
+      expect_false(grepl("which you chose", txt, fixed = TRUE), info = nm)
+    }
+  }
+  # the finding for an unreadable model says nothing about the setting
+  expect_false(any(grepl("NONMEM", lagged_one("sim <- solve(Some_Model, ev)",
+                                              model = "Some_Model")$issues$message)))
 })
 
 test_that("addlKeepsCov = TRUE, addlKeepsCov = FALSE and nonmem = TRUE all pass", {

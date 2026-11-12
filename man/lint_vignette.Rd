@@ -60,11 +60,28 @@ is not recognised unless the article also passes \code{"Some_Model"} to
 and an \code{f()} whose right-hand side depends on a covariate (directly, through
 intermediate assignments, or through an \verb{if()} condition), every simulation
 in the article -- each \code{rxSolve()} call and each rxode2 \code{solve(model, ...)}
-call -- must state \verb{addlKeepsCov =} or \code{nonmem = TRUE}. By default rxode2
-reads a lagged dose's \code{f()} covariates at the dose's arrival time, whereas
-NONMEM uses the dose record's covariates, and the two differ when the
-covariate changes between occasions. The contract is to resolve or report
-every form the rule can read, and to list here what it cannot.
+call -- must state \verb{addlKeepsCov =} or \code{nonmem = TRUE}. A lagged dose is
+applied when it arrives, and which record's covariates its \code{f()} reads then
+depends on the setting and on the dose type (see \emph{Which setting}), so the
+result changes when a covariate changes between occasions. The contract is
+to resolve or report every form the rule can read, and to list here what it
+cannot.
+
+\emph{Which setting.} Measured on rxode2 5.1.8.9000 (commit e4cb67f6), with two
+occasions that have different \code{f()}: for a bolus dose,
+\code{addlKeepsCov = FALSE} (the default) reads the record in force when the dose
+arrives, so a co-timed record sorted after the dose, or one inside the lag
+window, that still carries the previous occasion's covariates decides, while
+\code{addlKeepsCov = TRUE} and \code{nonmem = TRUE} read the dose record's own
+covariates, which is NONMEM's pairing. For an infusion (\code{rate = -2} with
+\code{dur()}, or a fixed rate), \code{FALSE} reads the dose record's own covariates
+unless a co-timed record follows it, and \code{TRUE} and \code{nonmem = TRUE} read the
+record \emph{before} the dose, even with no other records, so they do not match
+NONMEM there. Without a lag every setting agrees. What is right for every
+dose type is an event table in which each record carries the covariates of
+the dose that opened its interval, with \code{addlKeepsCov = FALSE}; the rule
+accepts \code{TRUE} and \code{nonmem = TRUE} too, but they match NONMEM only for bolus
+doses. The rule checks that the setting is stated, not the event table.
 
 \emph{What counts as a simulation.} \code{rxSolve()} in any spelling (\verb{rxode2::},
 \code{rxSolve.default}, native or magrittr pipes, arguments over several lines).

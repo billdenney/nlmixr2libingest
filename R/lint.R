@@ -165,14 +165,24 @@
 
 # --- lagged-dose f() covariates ------------------------------------------------
 #
-# A dose delayed by alag() is applied when it ARRIVES, so rxode2 evaluates its
-# f() at that later time. By default (addlKeepsCov = FALSE) the covariates f()
-# reads are therefore the ones in effect at the arrival time -- typically a
-# pre-dose sample at the dose time, or a record inside the lag window, that
-# still carries the previous occasion's covariate value. NONMEM instead uses the
-# covariates on the dose record (addlKeepsCov = TRUE, which nonmem = TRUE also
-# sets). The two give different bioavailability whenever f() depends on a
-# covariate that changes between occasions, so the article has to choose.
+# A dose delayed by alag() is applied when it ARRIVES, so which record's
+# covariates its f() reads depends on the setting and on the dose type
+# (measured on rxode2 5.1.8.9000, e4cb67f6; two occasions with different f()):
+#   bolus dose
+#     addlKeepsCov = FALSE (the default) reads the record in force at arrival:
+#       a co-timed record sorted after the dose, or one inside the lag window,
+#       that still carries the previous occasion's covariate wins.
+#     addlKeepsCov = TRUE and nonmem = TRUE read the dose record's own
+#       covariates, which is NONMEM's pairing.
+#   infusion (rate = -2 with dur(), or a fixed rate)
+#     FALSE reads the dose record's own covariates, unless a co-timed record
+#       follows it; a record inside the lag window does not override it.
+#     TRUE and nonmem = TRUE read the record BEFORE the dose, even with no other
+#       records, so they are not NONMEM's pairing here.
+# Without a lag every setting agrees. What is right for every dose type is an
+# event table in which each record carries the covariates of the dose that
+# opened its interval, with addlKeepsCov = FALSE. The rule asks only that the
+# setting be stated; it does not read the event table.
 
 # Record every assignment of a model() block into `acc`:
 #   acc$deps    named list, variable -> the names its right-hand sides read,
@@ -849,6 +859,12 @@
   list(sites = acc$sites, models = unique(acc$models), unparsed = acc$unparsed)
 }
 
+# The end of every lagged-dose fix: the setting to state and what it needs.
+.lintStateTail <- paste0(
+  "give every record the covariates of the dose that opened its interval and say ",
+  "in the article that you did (addlKeepsCov = TRUE or nonmem = TRUE also pass ",
+  "this check, but match NONMEM only for bolus doses)")
+
 # The rule: when the model has alag() and an f() that depends on a covariate,
 # every place the article solves the model must state addlKeepsCov or
 # nonmem = TRUE. `scan` is .lintScanSolves() of the article; `models` is
@@ -882,10 +898,18 @@
 
   what <- paste0("the model has alag() and an f() that depends on covariate(s) ",
                  paste(covs, collapse = ", "), ". ")
-  why <- paste0("rxode2 reads a lagged dose's f() covariates at its arrival time ",
-                "by default (addlKeepsCov = FALSE). NONMEM uses the dose record's ",
-                "covariates (addlKeepsCov = TRUE). State the setting and say in ",
-                "the article which you chose.")
+  why <- paste0("With alag(), which record supplies f()'s covariates depends on the ",
+                "setting and the dose type. By default (addlKeepsCov = FALSE) a bolus ",
+                "dose reads the record in force when it arrives, so a co-timed or ",
+                "lag-window record carrying the previous occasion's covariates changes ",
+                "the bioavailability, and an infusion (rate = -2 with dur(), or a fixed ",
+                "rate) reads its own record unless a co-timed record follows it. ",
+                "addlKeepsCov = TRUE and nonmem = TRUE read the dose record for a bolus, ",
+                "which is NONMEM's pairing, but the record before the dose for an ",
+                "infusion. Give every record the covariates of the dose that opened its ",
+                "interval, state addlKeepsCov = FALSE, and say in the article that you ",
+                "did. TRUE or nonmem = TRUE also passes this check, but matches NONMEM ",
+                "only for bolus doses.")
   for (s in scan$sites) {
     if (s$stated) next
     if (s$kind == "rxSolve" && is.na(s$opaque)) {
@@ -893,7 +917,8 @@
         "addlkeepscov-unstated", "warning",
         paste0("`", s$text, "` states neither addlKeepsCov nor nonmem = TRUE, but ",
                what, why),
-        "add addlKeepsCov = TRUE (NONMEM) or addlKeepsCov = FALSE (rxode2 default), or nonmem = TRUE, to this call (or inside rxControl() given as control =), and say in the article which you chose")
+        paste0("add addlKeepsCov = FALSE to this call (or inside rxControl() given as control =); ",
+               .lintStateTail))
     } else if (s$kind == "rxSolve") {
       # the call does not state the setting where it can be read, but its
       # control argument may: that is not known to be unstated
@@ -903,7 +928,8 @@
                "nonmem = TRUE where it can be read, and its control argument, `",
                s$opaque, "`, is a variable or call whose setting could not be read ",
                "here; ", what, why),
-        "state addlKeepsCov = / nonmem = TRUE in the call itself, or give control = rxControl(addlKeepsCov = ...) inline so it can be read, and say in the article which you chose")
+        paste0("state addlKeepsCov = FALSE in the call itself, or give control = rxControl(addlKeepsCov = FALSE) inline so it can be read; ",
+               .lintStateTail))
     } else if (s$kind == "solve-unresolved") {
       iss[[length(iss) + 1L]] <- .lintIssue(
         "addlkeepscov-unverifiable", "warning",
@@ -911,13 +937,15 @@
                "with event-table-like arguments) but no argument traces to a model ",
                "(a name assigned from readModelDb(), modellib() or rxode2(), or a model()/ini() ",
                "pipe of one), and ", what, why),
-        "assign the model from readModelDb(), modellib() or rxode2() and solve it by that name, or put addlKeepsCov = / nonmem = TRUE in this call, and say in the article which you chose")
+        paste0("assign the model from readModelDb(), modellib() or rxode2() and solve it by that name, or put addlKeepsCov = FALSE in this call; ",
+               .lintStateTail))
     } else {
       iss[[length(iss) + 1L]] <- .lintIssue(
         "addlkeepscov-unverifiable", "warning",
         paste0("cannot verify `", s$text, "`: it solves the model without a ",
                "rxSolve() call whose arguments can be read, and ", what, why),
-        "solve with rxSolve() directly, or put addlKeepsCov = / nonmem = TRUE in this call (for nlmixr2(est = \"rxSolve\"), through rxControl()), and say in the article which you chose")
+        paste0("solve with rxSolve() directly, or put addlKeepsCov = FALSE in this call (for nlmixr2(est = \"rxSolve\"), through rxControl()); ",
+               .lintStateTail))
     }
   }
   for (u in scan$unparsed) {
@@ -925,7 +953,8 @@
       "addlkeepscov-unverifiable", "warning",
       paste0("cannot verify the chunk containing `", u, "`: it mentions a solver ",
              "but does not parse as R, and ", what, why),
-      "fix the chunk so it parses, then state addlKeepsCov or nonmem = TRUE in each solve")
+      paste0("fix the chunk so it parses, then state addlKeepsCov = FALSE in each solve; ",
+             .lintStateTail))
   }
   iss
 }
@@ -972,11 +1001,28 @@
 #' and an `f()` whose right-hand side depends on a covariate (directly, through
 #' intermediate assignments, or through an `if()` condition), every simulation
 #' in the article -- each `rxSolve()` call and each rxode2 `solve(model, ...)`
-#' call -- must state `addlKeepsCov =` or `nonmem = TRUE`. By default rxode2
-#' reads a lagged dose's `f()` covariates at the dose's arrival time, whereas
-#' NONMEM uses the dose record's covariates, and the two differ when the
-#' covariate changes between occasions. The contract is to resolve or report
-#' every form the rule can read, and to list here what it cannot.
+#' call -- must state `addlKeepsCov =` or `nonmem = TRUE`. A lagged dose is
+#' applied when it arrives, and which record's covariates its `f()` reads then
+#' depends on the setting and on the dose type (see *Which setting*), so the
+#' result changes when a covariate changes between occasions. The contract is
+#' to resolve or report every form the rule can read, and to list here what it
+#' cannot.
+#'
+#' *Which setting.* Measured on rxode2 5.1.8.9000 (commit e4cb67f6), with two
+#' occasions that have different `f()`: for a bolus dose,
+#' `addlKeepsCov = FALSE` (the default) reads the record in force when the dose
+#' arrives, so a co-timed record sorted after the dose, or one inside the lag
+#' window, that still carries the previous occasion's covariates decides, while
+#' `addlKeepsCov = TRUE` and `nonmem = TRUE` read the dose record's own
+#' covariates, which is NONMEM's pairing. For an infusion (`rate = -2` with
+#' `dur()`, or a fixed rate), `FALSE` reads the dose record's own covariates
+#' unless a co-timed record follows it, and `TRUE` and `nonmem = TRUE` read the
+#' record *before* the dose, even with no other records, so they do not match
+#' NONMEM there. Without a lag every setting agrees. What is right for every
+#' dose type is an event table in which each record carries the covariates of
+#' the dose that opened its interval, with `addlKeepsCov = FALSE`; the rule
+#' accepts `TRUE` and `nonmem = TRUE` too, but they match NONMEM only for bolus
+#' doses. The rule checks that the setting is stated, not the event table.
 #'
 #' *What counts as a simulation.* `rxSolve()` in any spelling (`rxode2::`,
 #' `rxSolve.default`, native or magrittr pipes, arguments over several lines).
