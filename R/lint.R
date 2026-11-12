@@ -104,13 +104,13 @@
 }
 
 # Read each model source (a library name, a function, an rxUi): one list per
-# source with `ui` (NULL when it could not be read) and `error`. rxode2 prints
-# its syntax errors, which would bury the lint output.
+# source with `ui` (NULL when it could not be read) and `error`. rxode2 reports
+# its syntax errors as messages, which would bury the lint output.
 .lintReadModels <- function(srcs) {
   lapply(srcs, function(src) {
     ui <- NULL
     err <- tryCatch({
-      utils::capture.output(suppressMessages(ui <- .stAsUi(src)), type = "output")
+      suppressMessages(ui <- .stAsUi(src))
       NULL
     }, error = function(e) conditionMessage(e))
     list(label = if (is.character(src)) paste0("`", src, "`") else "the supplied model",

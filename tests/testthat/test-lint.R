@@ -1121,6 +1121,7 @@ test_that("eval options are read outside quoted strings, and the unsupported for
   # an option name inside a quoted string, or part of another name, is not the option
   expect_false(skipped("```{r, fig.cap='eval = FALSE in cap'}"))
   expect_false(skipped('```{r, fig.cap="a, eval = FALSE"}'))
+  expect_false(skipped("```{r, fig.cap='a eval = FALSE, b'}"))
   expect_false(skipped("```{r, my_eval = FALSE}"))
   expect_false(skipped("```{r, eval = TRUE}"))
   # not honoured: an expression, a variable, a document-wide default, and an
