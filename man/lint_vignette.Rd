@@ -33,12 +33,17 @@ state its lagged-dose covariate convention (see Details).
 indented, blockquoted or four-backtick fence is a chunk, and a chunk of
 another engine is not. Comments are removed before any text rule matches, so
 a commented-out call or an assertion quoted in a comment is not a finding.
-A chunk with \code{eval = FALSE} is not scanned by the lagged-dose rule (the text
-rules still read it): a literal \code{FALSE} or \code{F} among the header options
-outside quoted strings, or \verb{#| eval: false} / \verb{#| eval = FALSE} among the
-chunk's leading \verb{#|} lines. Not honoured: \code{eval = c(FALSE)}, \code{eval = !TRUE},
-\verb{eval = <variable>}, a document-wide \code{knitr::opts_chunk$set(eval = FALSE)},
-and an option line that comes after code.
+A chunk that knitr does not run is not scanned by the lagged-dose rule (the
+text rules still read it): a literal \code{FALSE} or \code{F} as \code{eval} among the header
+options outside quoted strings, or a false \code{eval} among the chunk's leading
+\verb{#| } option lines, read as \code{xfun::divide_chunk()} reads them. The lines need
+the space after \verb{#|} and must start the chunk. A block whose first line looks
+like \code{key: value} is YAML, where \code{false}, \code{no}, \code{n} and \code{off} (in lower,
+Capitalised or upper case) are FALSE, \code{F} and a quoted \code{"false"} are strings
+(the chunk runs) and a trailing \verb{ # comment} is not part of the value;
+otherwise the lines are R options (\verb{eval = FALSE, echo = TRUE}). Not honoured:
+\code{eval = c(FALSE)}, \code{eval = !TRUE}, \verb{eval = <variable>}, and a document-wide
+\code{knitr::opts_chunk$set(eval = FALSE)}.
 
 \strong{The model.} The \code{model} argument when given, else the literal names the
 article passes to \code{readModelDb()} or \code{modellib()}. The \verb{cmt =} rule and the lagged-dose rule
@@ -77,8 +82,9 @@ function is called with a model there, and is reported at the definition.
 \code{base::solve()} on a matrix is left alone, and so is a \code{solve()} the article
 defines itself at top level (its own \code{rxSolve()} call is judged instead; a
 definition inside a function or \code{local()} shadows nothing). A name assigned
-something that is not a model stops being one. \code{mod$simulate()} and
-\code{mod$solve()} are not rxode2 methods and are ignored.
+something that is not a model stops being one; an \code{if}/\verb{else}, \code{switch()},
+\code{tryCatch()} or \code{local()} that yields a model in every branch is a model.
+\code{mod$simulate()} and \code{mod$solve()} are not rxode2 methods and are ignored.
 
 \emph{What counts as stating the setting.} \verb{addlKeepsCov =} with any value but
 \code{NULL} (a variable counts: the author addressed \code{addlKeepsCov} itself), or a
@@ -97,7 +103,9 @@ arguments and in a \code{list()} or \code{c()} among them.
 \emph{Reported as not verifiable} (unless the call itself states the setting): an
 \code{rxSolve()} or model \code{solve()} whose \verb{control =} is a variable or any call
 other than \code{rxControl()} / \code{list()}, since the setting inside it cannot be
-read; \code{nlmixr2(..., est = "rxSolve")}, or an \code{est} that is not a literal;
+read; a call to \code{rxSolve} fetched from an object
+(\code{asNamespace("rxode2")$rxSolve(...)}, \code{ns[["rxSolve"]](...)});
+\code{nlmixr2(..., est = "rxSolve")}, or an \code{est} that is not a literal;
 \code{simulate()}; \code{rxSolve} or \code{solve} handed to another function as a value
 (\code{do.call()}, \code{lapply()}, \code{Map()}, \code{match.fun()}, ...) -- \code{solve} only when
 it travels with a model, a list of models, an event table or an
@@ -108,10 +116,12 @@ traceable model; and a chunk that mentions a solver but does not parse (a
 bare \verb{solve(} counts only when the article also uses \code{readModelDb()}, \code{modellib()} or the
 model's name).
 
-\emph{Not resolved and not reported.} Only two forms are silent whatever the
+\emph{Not resolved and not reported.} Only these forms are silent whatever the
 arguments: a call built from text (\code{eval(parse(text = ...))}) and one fetched
-by a name the rule cannot read (\code{getFromNamespace("rxSolve", "rxode2")(...)}).
-Others are reported only when their arguments are event-table-like, and are
+through a function the rule does not follow
+(\code{getFromNamespace("rxSolve", "rxode2")(...)},
+\code{getS3method("solve", "rxUi")(...)}). Others are reported only when their
+arguments are event-table-like, and are
 otherwise read as matrix algebra: a model returned by a user function; a
 model handed to a local function through \code{lapply()} or \code{do.call()} rather than
 called directly; \code{do.call(solve, args)} with \code{args} a bare name. A \code{solve()}

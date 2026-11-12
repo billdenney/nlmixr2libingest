@@ -896,8 +896,6 @@ test_that("an article with several models takes the union of their covariates", 
 
 # --- round 2: shadowing, indirect calls, tail forms, reassignment ------------------
 
-from_db <- 'mod <- readModelDb("Some_Model")'
-
 test_that("only a top-level solve() the article defines shadows the model solve()", {
   skip_if_not_installed("rxode2")
   # defined inside a function body or local(): the article-wide solve is untouched
@@ -1014,22 +1012,21 @@ test_that("a name assigned something else stops being a model, a list of models 
 
 test_that("the forms the rule cannot follow stay silent, as documented", {
   skip_if_not_installed("rxode2")
-  silent <- function(code) identical(lagged_checks_of(c(from_db, code)), character())
   # built from text or fetched by a name it cannot read
-  expect_true(silent('x <- eval(parse(text = "rxSolve(mod, ev)"))'))
-  expect_true(silent('x <- utils::getFromNamespace("rxSolve", "rxode2")(mod, ev)'))
+  expect_true(is_silent('x <- eval(parse(text = "rxSolve(mod, ev)"))'))
+  expect_true(is_silent('x <- utils::getFromNamespace("rxSolve", "rxode2")(mod, ev)'))
   # solve handed over with nothing model-like beside it
-  expect_true(silent("x <- lapply(mats, solve)"))
-  expect_true(silent("x <- do.call(solve, args)"))
+  expect_true(is_silent("x <- lapply(mats, solve)"))
+  expect_true(is_silent("x <- do.call(solve, args)"))
   # a model returned by a user function: seen only when the arguments are event-like
-  expect_true(silent(c('getm <- function(n) readModelDb(n)', 'm <- getm("A")', "x <- solve(m, dat)")))
+  expect_true(is_silent(c('getm <- function(n) readModelDb(n)', 'm <- getm("A")', "x <- solve(m, dat)")))
   expect_identical(
     lagged_checks_of(c('getm <- function(n) readModelDb(n)', 'm <- getm("A")',
                        "ev <- et(amt = 1)", "x <- solve(m, ev)")),
     "addlkeepscov-unverifiable")
   # a model reaching a local function through lapply()/do.call(), not a direct call
-  expect_true(silent(c("runsim <- function(m, e) solve(m, e)", "x <- lapply(list(mod), runsim, ev)")))
-  expect_true(silent(c("runsim <- function(m, e) solve(m, e)", "x <- do.call(runsim, list(mod, ev))")))
+  expect_true(is_silent(c("runsim <- function(m, e) solve(m, e)", "x <- lapply(list(mod), runsim, ev)")))
+  expect_true(is_silent(c("runsim <- function(m, e) solve(m, e)", "x <- do.call(runsim, list(mod, ev))")))
   expect_identical(
     lagged_checks_of(c(from_db, "runsim <- function(m, e) solve(m, e, atol = 1e-8)",
                        "x <- lapply(list(mod), runsim, ev)")),
@@ -1086,27 +1083,22 @@ test_that("an unreadable control argument is not verifiable, not unstated", {
 
 test_that("chunk fences are read the way knitr reads them", {
   call <- "sim <- rxode2::rxSolve(mod, ev)"
-  read <- function(lines) {
-    rmd <- withr::local_tempfile(fileext = ".Rmd")
-    writeLines(lines, rmd)
-    .lintRchunks(rmd)
-  }
-  expect_identical(read(c("  ```{r}", paste0("  ", call), "  ```")), list(call))
-  expect_identical(read(c("\t```{r}", paste0("\t", call), "\t```")), list(call))
-  expect_identical(read(c("````{r}", call, "````")), list(call))
-  expect_identical(read(c("> ```{r}", paste0("> ", call), "> ```")), list(call))
+  expect_identical(read_chunks(c("  ```{r}", paste0("  ", call), "  ```")), list(call))
+  expect_identical(read_chunks(c("\t```{r}", paste0("\t", call), "\t```")), list(call))
+  expect_identical(read_chunks(c("````{r}", call, "````")), list(call))
+  expect_identical(read_chunks(c("> ```{r}", paste0("> ", call), "> ```")), list(call))
   # every spelling of the R engine and its options
   for (header in c("```{r}", "```{R}", "```{r a}", "```{r, a}", "```{r a, echo = FALSE}",
                    "```{r,echo=FALSE}", "```{r }")) {
-    expect_identical(read(c(header, call, "```")), list(call), info = header)
+    expect_identical(read_chunks(c(header, call, "```")), list(call), info = header)
   }
   # other engines and plain code blocks are not R chunks
-  expect_identical(read(c("```{python}", call, "```")), list())
-  expect_identical(read(c("```{bash}", call, "```")), list())
-  expect_identical(read(c("```r", call, "```")), list())
-  expect_identical(read(c("```", call, "```")), list())
+  expect_identical(read_chunks(c("```{python}", call, "```")), list())
+  expect_identical(read_chunks(c("```{bash}", call, "```")), list())
+  expect_identical(read_chunks(c("```r", call, "```")), list())
+  expect_identical(read_chunks(c("```", call, "```")), list())
   # the R chunk after another engine's chunk is still found
-  expect_identical(read(c("```{python}", "x = 1", "```", "```{r}", call, "```")), list(call))
+  expect_identical(read_chunks(c("```{python}", "x = 1", "```", "```{r}", call, "```")), list(call))
 })
 
 test_that("the fence patterns agree with knitr's", {
@@ -1122,27 +1114,24 @@ test_that("the fence patterns agree with knitr's", {
 test_that("eval options are read outside quoted strings, and the unsupported forms are pinned", {
   skip_if_not_installed("rxode2")
   call <- "sim <- rxode2::rxSolve(mod, ev)"
-  skipped <- function(header, body = call) {
-    identical(lagged_one(body, header = header)$n, 0L)
-  }
-  expect_true(skipped("```{r, eval = FALSE}"))
-  expect_true(skipped("```{r eval=F}"))
-  expect_true(skipped("```{r, echo = TRUE, eval = FALSE, include = FALSE}"))
-  expect_true(skipped("```{r}", c("#| eval: false", call)))
-  expect_true(skipped("```{r}", c("#| eval: False", call)))
-  expect_true(skipped("```{r}", c("#| label: sim", "#| eval = FALSE", call)))
+  expect_true(is_skipped("```{r, eval = FALSE}"))
+  expect_true(is_skipped("```{r eval=F}"))
+  expect_true(is_skipped("```{r, echo = TRUE, eval = FALSE, include = FALSE}"))
+  expect_true(is_skipped("```{r}", c("#| eval: false", call)))
+  expect_true(is_skipped("```{r}", c("#| eval: False", call)))
+  expect_true(is_skipped("```{r}", c("#| echo = FALSE", "#| eval = FALSE", call)))
   # an option name inside a quoted string, or part of another name, is not the option
-  expect_false(skipped("```{r, fig.cap='eval = FALSE in cap'}"))
-  expect_false(skipped('```{r, fig.cap="a, eval = FALSE"}'))
-  expect_false(skipped("```{r, fig.cap='a eval = FALSE, b'}"))
-  expect_false(skipped("```{r, my_eval = FALSE}"))
-  expect_false(skipped("```{r, eval = TRUE}"))
+  expect_false(is_skipped("```{r, fig.cap='eval = FALSE in cap'}"))
+  expect_false(is_skipped('```{r, fig.cap="a, eval = FALSE"}'))
+  expect_false(is_skipped("```{r, fig.cap='a eval = FALSE, b'}"))
+  expect_false(is_skipped("```{r, my_eval = FALSE}"))
+  expect_false(is_skipped("```{r, eval = TRUE}"))
   # not honoured: an expression, a variable, a document-wide default, and an
   # option line that comes after code
-  expect_false(skipped("```{r, eval = c(FALSE)}"))
-  expect_false(skipped("```{r, eval = !TRUE}"))
-  expect_false(skipped("```{r, eval = skip_sims}"))
-  expect_false(skipped("```{r}", c(call, "#| eval: false")))
+  expect_false(is_skipped("```{r, eval = c(FALSE)}"))
+  expect_false(is_skipped("```{r, eval = !TRUE}"))
+  expect_false(is_skipped("```{r, eval = skip_sims}"))
+  expect_false(is_skipped("```{r}", c(call, "#| eval: false")))
   rmd <- withr::local_tempfile(fileext = ".Rmd")
   writeLines(c("```{r setup}", "knitr::opts_chunk$set(eval = FALSE)", "```",
                "```{r}", call, "```"), rmd)
@@ -1161,26 +1150,25 @@ test_that(".lintStripComments blanks comments, not the # inside a string", {
 
 test_that("the text rules ignore comments", {
   skip_if_not_installed("rxode2")
-  run <- function(code) lint_vignette(write_article(code))$issues$check
   # 2. amt-named-scalar
-  expect_identical(run('# ev <- et(amt = doses["depot"])'), character())
-  expect_identical(run('ev <- et(amt = doses["depot"])'), "amt-named-scalar")
+  expect_identical(lint_checks('# ev <- et(amt = doses["depot"])'), character())
+  expect_identical(lint_checks('ev <- et(amt = doses["depot"])'), "amt-named-scalar")
   # 4. cohort-too-large
-  expect_identical(run("# sim <- rxSolve(m, e, nSub = 5000)"), character())
-  expect_identical(run("sim <- rxSolve(m, e, nSub = 5000) # a cohort"), "cohort-too-large")
-  expect_identical(run('x <- "a # b"; sim <- rxSolve(m, e, nSub = 5000)'), "cohort-too-large")
-  expect_identical(run(c("x <- rxSolve(m, e,", "  nSub = 5000 # large", ")")), "cohort-too-large")
+  expect_identical(lint_checks("# sim <- rxSolve(m, e, nSub = 5000)"), character())
+  expect_identical(lint_checks("sim <- rxSolve(m, e, nSub = 5000) # a cohort"), "cohort-too-large")
+  expect_identical(lint_checks('x <- "a # b"; sim <- rxSolve(m, e, nSub = 5000)'), "cohort-too-large")
+  expect_identical(lint_checks(c("x <- rxSolve(m, e,", "  nSub = 5000 # large", ")")), "cohort-too-large")
   # 3. pknca-zero-row needs PKNCA and the filter in code
   filt <- "nca_in <- dplyr::filter(sim, time > 0)"
-  expect_identical(run(c("# PKNCA", filt)), character())
-  expect_identical(run(c("library(PKNCA)", paste("#", filt))), character())
-  expect_identical(run(c("library(PKNCA)", filt)), "pknca-zero-row")
+  expect_identical(lint_checks(c("# PKNCA", filt)), character())
+  expect_identical(lint_checks(c("library(PKNCA)", paste("#", filt))), character())
+  expect_identical(lint_checks(c("library(PKNCA)", filt)), "pknca-zero-row")
   # 5. assertions are gated on set.seed and rxSolve in code
   expect_identical(
-    run(c("# set.seed(1)", "sim <- rxSolve(mod, ev)", "stopifnot(all(diff(pv) < 0))")),
+    lint_checks(c("# set.seed(1)", "sim <- rxSolve(mod, ev)", "stopifnot(all(diff(pv) < 0))")),
     character())
   expect_identical(
-    run(c("set.seed(1)", "# sim <- rxSolve(mod, ev)", "stopifnot(all(diff(pv) < 0))")),
+    lint_checks(c("set.seed(1)", "# sim <- rxSolve(mod, ev)", "stopifnot(all(diff(pv) < 0))")),
     character())
   # 1. cmt-observable
   mod <- make_lag_model()
@@ -1254,4 +1242,174 @@ test_that("the model is taken from modellib() in the article when none is given"
   expect_match(res$issues$message, "covariate(s) DOSE_HIGH, FED_HIGHFAT.", fixed = TRUE)
   gone <- write_article(c('mod <- modellib("No_Such_Model_9999")', "sim <- rxode2::rxSolve(mod, ev)"))
   expect_identical(lint_vignette(gone)$issues$check, "addlkeepscov-model")
+})
+
+# --- round 3: members, option lines, tabs, branching values -------------------------
+
+test_that("a call to rxSolve fetched from an object is reported unless it states the setting", {
+  skip_if_not_installed("rxode2")
+  for (code in c('x <- asNamespace("rxode2")$rxSolve(mod, ev)',
+                 'ns <- asNamespace("rxode2"); x <- ns$rxSolve(mod, ev)',
+                 'x <- ns[["rxSolve"]](mod, ev)',
+                 "x <- ns$rxSolve.default(mod, ev)",
+                 "x <- obj@rxSolve(mod, ev)")) {
+    # one finding, not one for the member access and another for the call
+    expect_identical(lagged_checks_of(code), "addlkeepscov-unverifiable", info = code)
+  }
+  for (code in c("x <- ns$rxSolve(mod, ev, addlKeepsCov = TRUE)",
+                 'x <- ns[["rxSolve"]](mod, ev, nonmem = TRUE)',
+                 "x <- ns$rxSolve(mod, ev, control = rxControl(addlKeepsCov = FALSE))")) {
+    expect_identical(lagged_checks_of(code), character(), info = code)
+  }
+  # rxSolve as a member passed on as a value
+  expect_identical(lagged_checks_of("f <- ns$rxSolve"), "addlkeepscov-unverifiable")
+  expect_identical(lagged_checks_of("x <- lapply(evs, ns$rxSolve, mod)"), "addlkeepscov-unverifiable")
+  # members that are not rxSolve are not looked at
+  for (code in c("x <- ns$solve(mod, ev)", "x <- ns$other(mod, ev)", "x <- obj$rxSolveSimple(mod)",
+                 'x <- ns[["other"]](mod, ev)')) {
+    expect_identical(lagged_checks_of(code), character(), info = code)
+  }
+})
+
+test_that("a solve method fetched by name is a documented silent limit", {
+  skip_if_not_installed("rxode2")
+  expect_true(is_silent('x <- getS3method("solve", "rxUi")(mod, ev)'))
+  expect_true(is_silent('x <- utils::getS3method("solve", "rxUi")(mod, ev)'))
+})
+
+test_that(".lintStripComments cuts by the comment's own text, so tabs and wide characters are safe", {
+  expect_identical(.lintStripComments("\t\tx <- 1 # all(a == 0)"), "\t\tx <- 1 ")
+  expect_identical(.lintStripComments(c("\tx <- 1 # c", "\t\ty <- '#' # d")),
+                   c("\tx <- 1 ", "\t\ty <- '#' "))
+  expect_identical(.lintStripComments("x <- '日本' # all(a == 0)"), "x <- '日本' ")
+  expect_identical(.lintStripComments("\t# only a comment"), "\t")
+  # at the rule level: the commented assertion and cohort are not findings
+  expect_identical(lint_checks(c("set.seed(1)", "sim <- rxSolve(mod, ev)",
+                                 "\t\tx <- 1 # stopifnot(all(pct == 0))")), character())
+  expect_identical(lint_checks("\t\tsim <- rxSolve(m, e) # nSub = 5000"), character())
+})
+
+test_that("comments are found whatever the session's parse options are", {
+  withr::local_options(keep.parse.data = FALSE, keep.source = FALSE)
+  # a # inside a string survives only if the parse data was used, not the fallback
+  expect_identical(.lintStripComments(c("x <- '#' # c", "y <- \"a # b\"")),
+                   c("x <- '#' ", "y <- \"a # b\""))
+  expect_identical(getOption("keep.parse.data"), FALSE)
+  expect_identical(getOption("keep.source"), FALSE)
+})
+
+test_that("option lines are read the way xfun::divide_chunk and knitr read them", {
+  # known answers
+  expect_false(.lintOptionLinesNoEval(character()))
+  for (v in c("false", "False", "FALSE", "no", "No", "NO", "n", "N", "off", "Off", "OFF",
+              "false # why")) {
+    expect_true(.lintOptionLinesNoEval(paste("eval:", v)), info = v)
+  }
+  for (v in c("F", "f", "\"false\"", "'no'", "true", "false#no", "TRUE", "0")) {
+    expect_false(.lintOptionLinesNoEval(paste("eval:", v)), info = v)
+  }
+  expect_true(.lintOptionLinesNoEval(c("echo: false", "eval: no")))
+  expect_true(.lintOptionLinesNoEval("eval = FALSE"))
+  expect_true(.lintOptionLinesNoEval("eval = F"))
+  expect_true(.lintOptionLinesNoEval("echo = FALSE, eval = FALSE"))
+  expect_true(.lintOptionLinesNoEval(c("echo = FALSE,", "eval = FALSE")))
+  expect_false(.lintOptionLinesNoEval("eval = TRUE"))
+  expect_false(.lintOptionLinesNoEval("my_eval = FALSE"))
+  # an option line needs `#| ` with its space, and only the leading block counts
+  expect_false(is_skipped("```{r}", c("#|eval: false", rx_call)))
+  expect_false(is_skipped("```{r}", c(rx_call, "#| eval: false")))
+  expect_false(is_skipped("```{r}", c("", "#| eval: false", rx_call)))
+  expect_true(is_skipped("```{r}", c("#| eval: no", rx_call)))
+  expect_true(is_skipped("```{r}", c("#| eval: false # why", rx_call)))
+  expect_false(is_skipped("```{r}", c("#| eval: F", rx_call)))
+})
+
+test_that("a chunk is skipped exactly when knitr does not run it", {
+  skip_if_not_installed("knitr")
+  skip_if_not_installed("xfun")
+  skip_if_not_installed("yaml")
+  cases <- list(
+    c("```{r}", "#| eval: false"), c("```{r}", "#| eval: False"), c("```{r}", "#| eval: FALSE"),
+    c("```{r}", "#| eval: no"), c("```{r}", "#| eval: No"), c("```{r}", "#| eval: n"),
+    c("```{r}", "#| eval: N"), c("```{r}", "#| eval: off"), c("```{r}", "#| eval: Off"),
+    c("```{r}", "#| eval: OFF"), c("```{r}", "#| eval: F"), c("```{r}", "#| eval: f"),
+    c("```{r}", "#| eval: \"false\""), c("```{r}", "#| eval: true"),
+    c("```{r}", "#| eval: false # why"), c("```{r}", "#| eval: false#no"),
+    c("```{r}", "#| echo: false", "#| eval: false"),
+    c("```{r}", "#| eval = FALSE"), c("```{r}", "#| eval = F"),
+    c("```{r}", "#| echo = FALSE, eval = FALSE"), c("```{r}", "#| eval = TRUE"),
+    c("```{r}", "#|eval: false"), c("```{r}", "x <- 1", "#| eval: false"),
+    c("```{r}", "", "#| eval: false"),
+    c("```{r, eval = FALSE}"), c("```{r, eval=F}"), c("```{r eval = FALSE}"),
+    c("```{r, fig.cap='a eval = FALSE, b'}"), c("```{r, my_eval = FALSE}"),
+    c("```{r, eval = TRUE}"))
+  runs <- knitr_ran(cases)
+  mine <- vapply(cases, function(ch) {
+    !isFALSE(attr(read_chunks(c(ch, "x <- 1", "```"))[[1L]], "eval"))
+  }, logical(1L))
+  expect_identical(mine, runs, info = paste(cases[mine != runs], collapse = " ; "))
+  # the two forms knitr evaluates as expressions are not honoured: knitr skips
+  # these chunks and the rule scans them
+  not_honoured <- list(c("```{r, eval = !TRUE}"), c("```{r, eval = c(FALSE)}"))
+  expect_identical(knitr_ran(not_honoured), c(FALSE, FALSE))
+  expect_identical(
+    vapply(not_honoured, function(ch) {
+      !isFALSE(attr(read_chunks(c(ch, "x <- 1", "```"))[[1L]], "eval"))
+    }, logical(1L)),
+    c(TRUE, TRUE))
+})
+
+test_that("a bare > ends an empty blockquoted line instead of becoming code", {
+  expect_identical(read_chunks(c("> ```{r}", "> x <- 1", ">", "> y <- 2", "> ```")),
+                   list(c("x <- 1", "", "y <- 2")))
+  expect_identical(read_chunks(c("> ```{r}", "> x <- 1", "> ", "> y <- 2", "> ```")),
+                   list(c("x <- 1", "", "y <- 2")))
+  expect_identical(read_chunks(c("  ```{r}", "  x <- 1", "", "  y <- 2", "  ```")),
+                   list(c("x <- 1", "", "y <- 2")))
+})
+
+test_that("an assignment that yields a model or event table in every branch keeps the name", {
+  skip_if_not_installed("rxode2")
+  for (code in c('mod <- if (cond) readModelDb("A") else readModelDb("B")',
+                 'mod <- switch(kind, a = readModelDb("A"), b = readModelDb("B"))',
+                 'mod <- switch(kind, a = , b = readModelDb("B"), readModelDb("C"))',
+                 'mod <- tryCatch(readModelDb("A"), error = function(e) readModelDb("B"))',
+                 'mod <- try(readModelDb("A"))',
+                 'mod <- local({ x <- 1; readModelDb("A") })',
+                 'mod <- { x <- 1; readModelDb("A") }',
+                 'mod <- if (a) { readModelDb("A") } else if (b) { readModelDb("B") } else { readModelDb("C") }')) {
+    expect_identical(lagged_checks_of(c(code, "sim <- solve(mod, ev)")), "addlkeepscov-unstated",
+                     info = code)
+  }
+  for (code in c("ev <- if (cond) et(amt = 1) else et(amt = 2)",
+                 "ev <- switch(kind, a = et(amt = 1), b = et(amt = 2))",
+                 "ev <- tryCatch(et(amt = 1), error = function(e) et(amt = 2))",
+                 "ev <- local({ x <- 1; et(amt = 1) })")) {
+    expect_identical(lagged_checks_of(c(code, "sim <- solve(other, ev)")),
+                     "addlkeepscov-unverifiable", info = code)
+  }
+  # a branch that is not a model or event table, or a missing else, does not
+  for (code in c('mod <- if (cond) readModelDb("A")',
+                 'mod <- if (cond) readModelDb("A") else NULL',
+                 'mod <- switch(kind, a = readModelDb("A"), b = NULL)',
+                 'mod <- tryCatch(readModelDb("A"), error = function(e) NULL)',
+                 'mod <- tryCatch(readModelDb("A"), error = function(e) stop(e))')) {
+    expect_identical(lagged_one(c(code, "sim <- solve(mod, ev)"))$n, 0L, info = code)
+  }
+  # the same tests, directly
+  acc <- new_acc()
+  expect_true(.lintIsModel(quote(if (a) readModelDb("A") else readModelDb("B")), acc))
+  expect_false(.lintIsModel(quote(if (a) readModelDb("A")), acc))
+  expect_true(.lintIsEvents(quote(if (a) et(amt = 1) else et(amt = 2)), acc))
+  expect_false(.lintIsEvents(quote(if (a) et(amt = 1) else 0), acc))
+})
+
+test_that("names are tracked across the whole article, so a function body can clear a global", {
+  skip_if_not_installed("rxode2")
+  # documented limit: `ev <- 1` inside f() is read as an assignment to the global ev
+  expect_identical(
+    lagged_one(c("ev <- et(amt = 1)", "f <- function() { ev <- 1 }", "x <- solve(other, ev)"))$n,
+    0L)
+  expect_identical(
+    lagged_checks_of(c("ev <- et(amt = 1)", "x <- solve(other, ev)")), "addlkeepscov-unverifiable")
 })

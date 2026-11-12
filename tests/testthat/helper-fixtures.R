@@ -157,3 +157,40 @@ lag_covs <- function(...) {
 call_states <- function(code) {
   .lintCallStates(parse(text = code, keep.source = FALSE)[[1L]])
 }
+
+# A model read from the library, and a rxSolve call on it, for the lagged-dose tests.
+from_db <- 'mod <- readModelDb("Some_Model")'
+rx_call <- "sim <- rxode2::rxSolve(mod, ev)"
+
+# TRUE when an article holding `code` (after the readModelDb() line) has no
+# lagged-dose finding: the rule neither resolves nor reports it.
+is_silent <- function(code) {
+  identical(lagged_checks_of(c(from_db, code)), character())
+}
+
+# The R chunks of an Rmd holding `lines`.
+read_chunks <- function(lines) {
+  rmd <- withr::local_tempfile(fileext = ".Rmd")
+  writeLines(lines, rmd)
+  .lintRchunks(rmd)
+}
+
+# TRUE when a chunk with this header and body is not scanned for simulations.
+is_skipped <- function(header, body = rx_call) {
+  identical(lagged_one(body, header = header)$n, 0L)
+}
+
+# The finding ids of lint_vignette() on an article holding `code`.
+lint_checks <- function(code) {
+  lint_vignette(write_article(code))$issues$check
+}
+
+# Which chunks knitr evaluates: `chunks` is a list of c(header, lines...) and the
+# answer says, for each, whether its code ran.
+knitr_ran <- function(chunks) {
+  src <- unlist(lapply(seq_along(chunks), function(i) {
+    c(chunks[[i]][[1L]], chunks[[i]][-1L], sprintf("cat('RAN_%d\\n')", i), "```", "")
+  }))
+  out <- unlist(strsplit(knitr::knit(text = src, quiet = TRUE, envir = new.env()), "\n"))
+  vapply(seq_along(chunks), function(i) any(grepl(sprintf("^## RAN_%d$", i), out)), NA)
+}

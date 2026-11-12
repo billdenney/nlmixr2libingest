@@ -24,12 +24,30 @@
   grepl("(^|[ ,])eval\\s*=\\s*(FALSE|F)\\s*(,|$)", unquoted)
 }
 
+# Whether a chunk's leading `#| ` option lines turn evaluation off. `meta` is
+# the text after each line's `#| ` prefix. As in xfun::divide_chunk(), the block
+# is YAML when its first line looks like `key: value`, and R-style options
+# (`eval = FALSE, echo = TRUE`) otherwise. YAML booleans are the ones R's yaml
+# reads as FALSE: false, no, n and off in lower, Capitalised or upper case --
+# `F` is a string there, and the chunk runs. A trailing ` # comment` is not part
+# of the value.
+.lintOptionLinesNoEval <- function(meta) {
+  if (!length(meta)) return(FALSE)
+  if (grepl("^[^ :]+:($|\\s)", meta[[1L]])) {
+    vals <- sub("^eval:\\s*", "", meta[grepl("^eval:($|\\s)", meta)])
+    vals <- trimws(sub("\\s+#.*$", "", vals))
+    return(any(vals %in% c("false", "False", "FALSE", "no", "No", "NO", "n", "N",
+                           "off", "Off", "OFF")))
+  }
+  grepl("(^|,)\\s*eval\\s*=\\s*(FALSE|F)\\s*(,|$)", paste(meta, collapse = ","))
+}
+
 # The R code of each R chunk of an Rmd, one character vector per chunk (chunks
 # are parsed separately so one that does not parse cannot hide the others).
 # Fences are matched as knitr matches them, so an indented or four-backtick
 # chunk is read; chunks of other engines are not. A chunk that does not run --
-# `eval = FALSE` in its header, or `#| eval: false` / `#| eval = FALSE` among
-# its leading `#|` option lines -- carries attr(, "eval") = FALSE.
+# `eval = FALSE` in its header, or a false `eval` among its leading `#| ` option
+# lines (see .lintOptionLinesNoEval()) -- carries attr(, "eval") = FALSE.
 .lintRchunks <- function(rmd) {
   lines <- readLines(rmd, warn = FALSE)
   inchunk <- FALSE
@@ -38,6 +56,7 @@
   leading <- FALSE
   chunks <- list()
   skip <- logical()
+  meta <- list()
   for (ln in lines) {
     if (!inchunk) {
       if (grepl(.lintChunkBegin, ln)) {
@@ -48,6 +67,7 @@
         leading <- TRUE
         if (is_r) {
           chunks[[length(chunks) + 1L]] <- character()
+          meta[[length(meta) + 1L]] <- character()
           skip <- c(skip, .lintHeaderNoEval(options))
         }
       }
@@ -55,32 +75,52 @@
     }
     if (grepl(.lintChunkEnd, ln)) { inchunk <- FALSE; next }
     if (!is_r) next
-    if (nzchar(indent) && startsWith(ln, indent)) ln <- substring(ln, nchar(indent) + 1L)
+    # a bare `>` ends a blockquoted line that is empty
+    if (nzchar(indent)) {
+      if (startsWith(ln, indent)) ln <- substring(ln, nchar(indent) + 1L)
+      else if (identical(ln, sub("\\s+$", "", indent))) ln <- ""
+    }
     i <- length(chunks)
     chunks[[i]] <- c(chunks[[i]], ln)
-    if (leading && grepl("^#\\|", ln)) {
-      if (grepl("^#\\|\\s*eval\\s*[:=]\\s*(false|False|FALSE|F)\\s*$", ln)) skip[[i]] <- TRUE
+    if (leading && startsWith(ln, "#| ")) {
+      meta[[i]] <- c(meta[[i]], substring(ln, 4L))
     } else {
       leading <- FALSE
     }
   }
-  for (i in which(skip)) attr(chunks[[i]], "eval") <- FALSE
+  for (i in seq_along(chunks)) {
+    if (skip[[i]] || .lintOptionLinesNoEval(meta[[i]])) attr(chunks[[i]], "eval") <- FALSE
+  }
   chunks
 }
 
+# Everything from the first `#` not preceded by a backslash: the crude comment
+# cut, used on code that cannot be parsed.
+.lintCutComment <- function(x) sub("(^|[^\\\\])#.*$", "\\1", x, perl = TRUE)
+
 # One chunk's code with its comments blanked, so that a rule matching text sees
 # only what runs. Comments are found from the parse data, which knows a `#` in
-# a string from a comment; code that does not parse falls back to dropping
-# everything from the first `#` not preceded by a backslash.
+# a string from a comment, and are cut from the end of their line by their own
+# text (the parser's columns count a tab to the next multiple of 8, so they
+# cannot be used to cut). The session's keep.parse.data option is set for the
+# parse, so that only code that genuinely does not parse takes the fallback of
+# dropping everything from the first `#` not preceded by a backslash.
 .lintStripComments <- function(code) {
   if (!length(code)) return(code)
+  old <- options(keep.source = TRUE, keep.parse.data = TRUE)
+  on.exit(options(old), add = TRUE)
   pd <- tryCatch(utils::getParseData(parse(text = code, keep.source = TRUE)),
                  error = function(e) NULL)
-  if (is.null(pd)) return(sub("(^|[^\\\\])#.*$", "\\1", code, perl = TRUE))
+  if (is.null(pd)) return(.lintCutComment(code))
   comments <- pd[pd$token == "COMMENT", , drop = FALSE]
   for (i in seq_len(nrow(comments))) {
     ln <- comments$line1[[i]]
-    code[[ln]] <- substr(code[[ln]], 1L, comments$col1[[i]] - 1L)
+    txt <- comments$text[[i]]
+    code[[ln]] <- if (endsWith(code[[ln]], txt)) {
+      substr(code[[ln]], 1L, nchar(code[[ln]]) - nchar(txt))
+    } else {
+      .lintCutComment(code[[ln]])
+    }
   }
   code
 }
@@ -346,6 +386,34 @@
     (identical(nm, "~") && length(a) == 2L && .lintIsModel(a[[2L]], acc))
 }
 
+# Whether every branch of an if/else, switch(), tryCatch()/try() or local() call
+# `x` (named `nm`) satisfies `holds`; NULL when `x` is not one of those. An if
+# without an else, a switch() with no arms, and a tryCatch() handler that does
+# not return such a value fail.
+.lintBranchHolds <- function(x, nm, holds) {
+  args <- as.list(x)[-1L]
+  nms <- names(args)
+  if (is.null(nms)) nms <- rep("", length(args))
+  if (identical(nm, "if")) {
+    return(length(args) >= 3L && holds(args[[2L]]) && holds(args[[3L]]))
+  }
+  if (identical(nm, "switch")) {
+    arms <- args[-1L]
+    arms <- arms[!vapply(arms, identical, logical(1L), quote(expr = ))]
+    return(length(arms) > 0L && all(vapply(arms, holds, logical(1L))))
+  }
+  if (identical(nm, "local")) return(length(args) >= 1L && holds(args[[1L]]))
+  if (nm %in% c("tryCatch", "try", "withCallingHandlers")) {
+    value <- args[nms %in% c("", "expr")]
+    handlers <- args[!nms %in% c("", "expr", "finally")]
+    return(length(value) >= 1L && holds(value[[1L]]) &&
+             all(vapply(handlers, function(h) {
+               is.call(h) && identical(.lintCallName(h), "function") && holds(h[[3L]])
+             }, logical(1L))))
+  }
+  NULL
+}
+
 # TRUE when `x` is a list of models: a name known to hold one, a list()/c() with
 # a model (or a list of models) in it, an apply-family call that builds models
 # (lapply(names, readModelDb), lapply(names, function(n) readModelDb(n))), or
@@ -384,6 +452,8 @@
   nm <- .lintCallName(x)
   if (nm %in% .lintModelMakers) return(TRUE)
   if (identical(nm, "{") && length(x) >= 2L) return(.lintIsModel(x[[length(x)]], acc))
+  branches <- .lintBranchHolds(x, nm, function(e) .lintIsModel(e, acc))
+  if (!is.null(branches)) return(branches)
   if (nm %in% c("$", "[[") && length(x) == 3L) {
     if (.lintIsContainer(x[[2L]], acc)) return(TRUE)
     return(nm == "$" && identical(x[[3L]], quote(ui)) && .lintIsModel(x[[2L]], acc))
@@ -414,6 +484,8 @@
   }
   if (identical(nm, "function")) return(.lintIsEvents(parts[[3L]], acc))
   if (identical(nm, "{")) return(.lintIsEvents(parts[[length(parts)]], acc))
+  branches <- .lintBranchHolds(x, nm, function(e) .lintIsEvents(e, acc))
+  if (!is.null(branches)) return(branches)
   if (nm %in% .lintEventCombinators) {
     return(any(vapply(parts[-1L], .lintIsEvents, logical(1L), acc = acc)))
   }
@@ -438,13 +510,23 @@
 # TRUE when `a` is the name `s` or the string "s".
 .lintIsRef <- function(a, s) identical(a, s) || identical(a, as.name(s))
 
-# TRUE when `a` refers to rxSolve as a value: the name, pkg::name, or -- when
+# TRUE when `x` is obj$name, obj@name or obj[[name]].
+.lintIsMemberCall <- function(x) {
+  is.call(x) && length(x) == 3L && is.symbol(x[[1L]]) &&
+    as.character(x[[1L]]) %in% c("$", "@", "[[")
+}
+
+# TRUE when `a` refers to rxSolve as a value: the name, pkg::name, a member of
+# an object (asNamespace("rxode2")$rxSolve, ns[["rxSolve"]]), or -- when
 # `strings` -- the string (do.call("rxSolve", ...), match.fun("rxSolve")).
 .lintIsRxSolveRef <- function(a, strings) {
   for (s in c("rxSolve", "rxSolve.default")) {
     if (is.symbol(a) && identical(a, as.name(s))) return(TRUE)
     if (strings && identical(a, s)) return(TRUE)
     if (.lintIsNsCall(a) && identical(as.character(a[[3L]]), s)) return(TRUE)
+    if (.lintIsMemberCall(a) && (identical(a[[3L]], as.name(s)) || identical(a[[3L]], s))) {
+      return(TRUE)
+    }
   }
   FALSE
 }
@@ -481,8 +563,10 @@
 # (lapply(list(mod), solve, ev), do.call(solve, list(mod, ev))). A `solve` the
 # article defines at top level is its own function and is not looked for.
 .lintIndirectKind <- function(nm, args, acc) {
-  # obj$solve and pkg::solve name a member; they do not hand a function over
-  if (nm %in% c("$", "@", "::", ":::")) return(NA_character_)
+  # obj$solve, obj[["solve"]] and pkg::solve name a member; they do not hand a
+  # function over. A call to a member that is rxSolve is reported with its
+  # call (see .lintVisitCall()), and rxSolve as a value at its parent call.
+  if (nm %in% c("$", "@", "[[", "::", ":::")) return(NA_character_)
   fetch <- nm %in% c("do.call", "match.fun", "get", "getExportedValue")
   if (any(vapply(args, .lintIsRxSolveRef, logical(1L), strings = fetch))) return("indirect")
   if ("solve" %in% acc$topfuns) return(NA_character_)
@@ -626,14 +710,19 @@
 .lintVisitCall <- function(x, nm, acc) {
   args <- as.list(x)[-1L]
   local_solve <- "solve" %in% acc$topfuns
-  kind <- if (nm %in% c("rxSolve", "rxSolve.default")) "rxSolve"
+  # asNamespace("rxode2")$rxSolve(mod, ev): the function is fetched from an
+  # object, so the call cannot be followed, but its own arguments can state the
+  # setting
+  member_call <- .lintIsMemberCall(x[[1L]]) && .lintIsRxSolveRef(x[[1L]], strings = TRUE)
+  kind <- if (member_call) "indirect"
+          else if (nm %in% c("rxSolve", "rxSolve.default")) "rxSolve"
           else if (.lintIsSolveName(nm) && !(identical(nm, "solve") && local_solve)) .lintSolveKind(x, acc)
           else if (nm %in% c("nlmixr2", "nlmixr")) .lintEstKind(args)
           else if (identical(nm, "simulate")) "simulate"
           else .lintIndirectKind(nm, args, acc)
   id <- NA_integer_
   if (!is.na(kind)) {
-    stated <- if (identical(kind, "indirect")) .lintIndirectStates(x) else .lintCallStates(x)
+    stated <- if (identical(kind, "indirect") && !member_call) .lintIndirectStates(x) else .lintCallStates(x)
     id <- .lintAddSite(acc, kind, stated, .lintCallText(x),
                        if (kind %in% c("rxSolve", "solve-unresolved")) .lintOpaqueControl(x) else NA_character_)
   }
@@ -856,12 +945,17 @@
 #' indented, blockquoted or four-backtick fence is a chunk, and a chunk of
 #' another engine is not. Comments are removed before any text rule matches, so
 #' a commented-out call or an assertion quoted in a comment is not a finding.
-#' A chunk with `eval = FALSE` is not scanned by the lagged-dose rule (the text
-#' rules still read it): a literal `FALSE` or `F` among the header options
-#' outside quoted strings, or `#| eval: false` / `#| eval = FALSE` among the
-#' chunk's leading `#|` lines. Not honoured: `eval = c(FALSE)`, `eval = !TRUE`,
-#' `eval = <variable>`, a document-wide `knitr::opts_chunk$set(eval = FALSE)`,
-#' and an option line that comes after code.
+#' A chunk that knitr does not run is not scanned by the lagged-dose rule (the
+#' text rules still read it): a literal `FALSE` or `F` as `eval` among the header
+#' options outside quoted strings, or a false `eval` among the chunk's leading
+#' `#| ` option lines, read as `xfun::divide_chunk()` reads them. The lines need
+#' the space after `#|` and must start the chunk. A block whose first line looks
+#' like `key: value` is YAML, where `false`, `no`, `n` and `off` (in lower,
+#' Capitalised or upper case) are FALSE, `F` and a quoted `"false"` are strings
+#' (the chunk runs) and a trailing ` # comment` is not part of the value;
+#' otherwise the lines are R options (`eval = FALSE, echo = TRUE`). Not honoured:
+#' `eval = c(FALSE)`, `eval = !TRUE`, `eval = <variable>`, and a document-wide
+#' `knitr::opts_chunk$set(eval = FALSE)`.
 #'
 #' **The model.** The `model` argument when given, else the literal names the
 #' article passes to `readModelDb()` or `modellib()`. The `cmt =` rule and the lagged-dose rule
@@ -900,8 +994,9 @@
 #' `base::solve()` on a matrix is left alone, and so is a `solve()` the article
 #' defines itself at top level (its own `rxSolve()` call is judged instead; a
 #' definition inside a function or `local()` shadows nothing). A name assigned
-#' something that is not a model stops being one. `mod$simulate()` and
-#' `mod$solve()` are not rxode2 methods and are ignored.
+#' something that is not a model stops being one; an `if`/`else`, `switch()`,
+#' `tryCatch()` or `local()` that yields a model in every branch is a model.
+#' `mod$simulate()` and `mod$solve()` are not rxode2 methods and are ignored.
 #'
 #' *What counts as stating the setting.* `addlKeepsCov =` with any value but
 #' `NULL` (a variable counts: the author addressed `addlKeepsCov` itself), or a
@@ -920,7 +1015,9 @@
 #' *Reported as not verifiable* (unless the call itself states the setting): an
 #' `rxSolve()` or model `solve()` whose `control =` is a variable or any call
 #' other than `rxControl()` / `list()`, since the setting inside it cannot be
-#' read; `nlmixr2(..., est = "rxSolve")`, or an `est` that is not a literal;
+#' read; a call to `rxSolve` fetched from an object
+#' (`asNamespace("rxode2")$rxSolve(...)`, `ns[["rxSolve"]](...)`);
+#' `nlmixr2(..., est = "rxSolve")`, or an `est` that is not a literal;
 #' `simulate()`; `rxSolve` or `solve` handed to another function as a value
 #' (`do.call()`, `lapply()`, `Map()`, `match.fun()`, ...) -- `solve` only when
 #' it travels with a model, a list of models, an event table or an
@@ -931,10 +1028,12 @@
 #' bare `solve(` counts only when the article also uses `readModelDb()`, `modellib()` or the
 #' model's name).
 #'
-#' *Not resolved and not reported.* Only two forms are silent whatever the
+#' *Not resolved and not reported.* Only these forms are silent whatever the
 #' arguments: a call built from text (`eval(parse(text = ...))`) and one fetched
-#' by a name the rule cannot read (`getFromNamespace("rxSolve", "rxode2")(...)`).
-#' Others are reported only when their arguments are event-table-like, and are
+#' through a function the rule does not follow
+#' (`getFromNamespace("rxSolve", "rxode2")(...)`,
+#' `getS3method("solve", "rxUi")(...)`). Others are reported only when their
+#' arguments are event-table-like, and are
 #' otherwise read as matrix algebra: a model returned by a user function; a
 #' model handed to a local function through `lapply()` or `do.call()` rather than
 #' called directly; `do.call(solve, args)` with `args` a bare name. A `solve()`
