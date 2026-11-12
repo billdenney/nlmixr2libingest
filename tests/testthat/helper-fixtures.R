@@ -92,9 +92,25 @@ make_lag_model <- function(pre = character(),
   eval(parse(text = txt))
 }
 
-# An article (Rmd) holding `code` in one R chunk.
-write_article <- function(code, env = parent.frame()) {
+# An article (Rmd) holding `code` in one R chunk; `header` is the chunk header.
+write_article <- function(code, env = parent.frame(), header = "```{r}") {
   rmd <- withr::local_tempfile(fileext = ".Rmd", .local_envir = env)
-  writeLines(c("---", "title: t", "---", "", "```{r}", code, "```"), rmd)
+  writeLines(c("---", "title: t", "---", "", header, code, "```"), rmd)
   rmd
+}
+
+# The state .lintWalkSolves() threads through an article, for direct tests.
+new_acc <- function(modelnames = character(), containers = character(),
+                    eventnames = character()) {
+  acc <- new.env(parent = emptyenv())
+  acc$sites <- list()
+  acc$models <- character()
+  acc$modelnames <- modelnames
+  acc$containers <- containers
+  acc$eventnames <- eventnames
+  acc$funs <- list()
+  acc$pending <- list()
+  acc$ctx <- NULL
+  acc$unparsed <- character()
+  acc
 }

@@ -69,14 +69,14 @@ API — but never reimplements model **validation**, which stays in
   observable, a named-vector character subscript to `amt =`, a PKNCA
   `time = 0`-dropping filter, a simulated cohort over the per-arm cap) *before*
   the expensive render, so they are fixed without a render round-trip. It also
-  requires every `rxSolve()` call to state `addlKeepsCov =` or `nonmem = TRUE`
-  when the model has `alag()` and an `f()` that depends on a covariate (rxode2
-  and NONMEM read a lagged dose's covariates at different records; rxode2's
-  `solve(model, ...)` counts, `base::solve()` on a matrix does not); simulations
-  through `nlmixr2(est = "rxSolve")` or `simulate()`, or a `solve()` whose model
-  cannot be traced, are reported as not verifiable.
-  High-precision (numeric `amt` subscripts and non-PKNCA filters are not flagged);
-  a prior, not a gate. CLI: `inst/scripts/lint_vignette.R`.
+  requires every simulation (`rxSolve()`, or rxode2's `solve(model, ...)`) to
+  state `addlKeepsCov =` or `nonmem = TRUE` when the model has `alag()` and an
+  `f()` that depends on a covariate, because rxode2 and NONMEM read a lagged
+  dose's covariates at different records. That rule resolves or reports every
+  form it can read -- simulations it cannot trace are reported as not
+  verifiable -- and lists what it cannot in `?lint_vignette`. The rules are
+  best-effort pre-checks: a clean lint is a prior, not a guarantee, and does not
+  replace the render gate. CLI: `inst/scripts/lint_vignette.R`.
 - **Naming pre-brief** — `naming_prebrief()` resolves a paper's covariates (and
   optionally parameters/compartments) to canonical names *once*, up front, so the
   agent ingests one small report instead of loading the ~136k-token register or

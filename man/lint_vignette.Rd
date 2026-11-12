@@ -24,19 +24,70 @@ Scans the vignette's R chunks (and, when supplied, the model) for the
 recurring failures that otherwise only surface during an expensive render:
 an oversized simulation cohort, a missing \verb{cmt =} for an algebraic
 observable (the most common slot-renumbering failure), a named-vector scalar
-passed to \verb{amt =}, and a PKNCA input filter that drops the \code{time = 0} row.
+passed to \verb{amt =}, a PKNCA input filter that drops the \code{time = 0} row,
+assertions that cannot hold across machines, and a simulation that does not
+state its lagged-dose covariate convention (see Details).
 }
 \details{
-It also checks the lagged-dose bioavailability rule. When the model has an
-\code{alag()} statement and an \code{f()} whose right-hand side depends on a covariate
-(directly, through intermediate assignments, or through an \verb{if()}
-condition), every \code{rxSolve()} call in the article must state
-\verb{addlKeepsCov =} or \code{nonmem = TRUE}: by default rxode2 reads a lagged dose's
-\code{f()} covariates at the dose's arrival time, whereas NONMEM uses the dose
-record's covariates, and the two differ when the covariate changes between
-occasions. \code{rxSolve()} calls are recognised however they are written
-(\code{rxode2::rxSolve()}, piped, arguments over several lines). A simulation run
-through \code{nlmixr2(..., est = "rxSolve")}, \code{simulate()}, or an \code{rxSolve} passed
-to another function cannot be read statically and is reported as not
-verifiable unless the call itself names the setting.
+\strong{Lagged-dose bioavailability.} When the model has an \code{alag()} statement
+and an \code{f()} whose right-hand side depends on a covariate (directly, through
+intermediate assignments, or through an \verb{if()} condition), every simulation
+in the article -- each \code{rxSolve()} call and each rxode2 \code{solve(model, ...)}
+call -- must state \verb{addlKeepsCov =} or \code{nonmem = TRUE}. By default rxode2
+reads a lagged dose's \code{f()} covariates at the dose's arrival time, whereas
+NONMEM uses the dose record's covariates, and the two differ when the
+covariate changes between occasions. The contract is to resolve or report
+every form the rule can read, and to list here what it cannot.
+
+\emph{What counts as a simulation.} \code{rxSolve()} in any spelling (\verb{rxode2::},
+\code{rxSolve.default}, native or magrittr pipes, arguments over several lines).
+\code{solve()} counts when an argument traces to a model through the article's
+assignments: a name assigned from \code{readModelDb()}, \code{rxode2()} or \code{rxode()};
+a \code{model()} / \code{ini()} / \code{zeroRe()} pipe of one; the \verb{$ui} of one; an element
+(\code{$}, \code{[[}) of a list of models; the loop variable of a \code{for} loop over such
+a list, or the parameter of a function mapped over it by \code{lapply()} and the
+like; a \code{with(list(m = mod), ...)} binding; the model's library name. A
+\code{solve()} inside an article-local function on one of its parameters counts
+when the function is called with a model there, and is reported at the
+definition. \code{base::solve()} on a matrix is left alone, and so is a \code{solve()}
+the article defines itself (its own \code{rxSolve()} call is judged instead).
+Chunks with \code{eval = FALSE} are skipped.
+
+\emph{What counts as stating the setting.} \verb{addlKeepsCov =} with any value but
+\code{NULL}, or \verb{nonmem =} with anything but \code{NULL} or a literal \code{FALSE}, among
+the call's own arguments or inside an \code{rxControl()} (or \code{control = list()})
+argument. A variable counts, since it states the setting. Arguments of other
+nested calls do not: \code{foo(addlKeepsCov = TRUE)} inside an \code{rxSolve()} call is
+\code{foo}'s argument. \code{control = ctl}, with \code{ctl} defined elsewhere, is not
+followed.
+
+\emph{Reported as not verifiable} (unless the call itself states the setting):
+\code{nlmixr2(..., est = "rxSolve")}, or an \code{est} that is not a literal;
+\code{simulate()}; \code{rxSolve} or \code{solve} handed to another function as a value
+(\code{do.call()}, \code{lapply()}, \code{Map()}, \code{match.fun()}, ...) -- \code{solve} only when
+it travels with a model, a list of models, an event table or an
+rxSolve-only argument, since \code{lapply(matrices, solve)} is matrix algebra;
+a \code{solve()} with event-table-like arguments (an \code{et()} call, a data frame of
+dosing records, a function that builds one, \verb{atol =}, \verb{params =}, ...) but no
+traceable model; and a chunk that mentions a solver but does not parse (a
+bare \verb{solve(} counts only when the article also uses \code{readModelDb()} or the
+model's name). A model that is named but cannot be read is reported too.
+
+\emph{Not resolved and not reported.} A model returned by a user function, built
+by \code{eval(parse())} or \code{getFromNamespace()}, or reached by a \code{for} loop over
+\code{readModelDb()} names; a model passed to a local function through
+\code{lapply()} or \code{do.call()} rather than called directly; \code{do.call(solve, args)}
+with \code{args} a bare name; a \code{solve()} whose model cannot be traced and whose
+arguments are not event-table-like (it is read as matrix algebra). Names are
+tracked across the whole article rather than per function.
+
+\emph{Over-approximations} (reported although the rule may not apply, and cleared
+by stating the setting). \code{alag()} and \code{f()} are not tied to the same
+compartment. Assignments are not ordered: every right-hand side a variable is
+ever given counts, including one read before it is assigned. An article that
+uses several models takes the union of their covariates, so a simulation of a
+model without the hazard is reported when another model in the article has
+it. Covariates that never change between occasions (weight, sex) are
+reported like any other; stating \code{addlKeepsCov = FALSE} is the intended way
+to clear them.
 }

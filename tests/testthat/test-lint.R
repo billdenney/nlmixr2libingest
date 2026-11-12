@@ -485,3 +485,433 @@ test_that("the model's library name counts as a model, and a solve() of it is fl
   # with no model name known, the same call is a base::solve() on an unknown
   expect_identical(lint_vignette(rmd)$n, 0L)
 })
+
+# --- direct known answers for the resolvers ------------------------------------
+
+test_that(".lintIsModel resolves exactly the forms that hold a model", {
+  acc <- new_acc(modelnames = c("mod", "Some_Model"), containers = "models")
+  is_model <- function(e) .lintIsModel(e, acc)
+  # names and strings known to hold a model, aliases through them
+  expect_true(is_model(quote(mod)))
+  expect_true(is_model("Some_Model"))
+  expect_false(is_model(quote(other)))
+  expect_false(is_model("other"))
+  # makers, with or without a namespace
+  expect_true(is_model(quote(readModelDb("X"))))
+  expect_true(is_model(quote(rxode2::rxode2(readModelDb("X")))))
+  expect_true(is_model(quote(rxode2::rxode(mod))))
+  # wrappers carry the model of their first argument, and only that
+  expect_true(is_model(quote(model(mod, {a <- 1}))))
+  expect_true(is_model(quote(mod %>% ini(a = 1) %>% zeroRe())))
+  expect_true(is_model(quote(suppressMessages(rxode2::zeroRe(mod)))))
+  expect_true(is_model(quote(et(mod, amt = 100))))
+  expect_false(is_model(quote(zeroRe(other))))
+  expect_false(is_model(quote(model(other, {a <- 1}))))
+  # elements of a list of models, and the ui of a model
+  expect_true(is_model(quote(models$a)))
+  expect_true(is_model(quote(models[["a"]])))
+  expect_false(is_model(quote(models[1])))
+  expect_true(is_model(quote(mod$ui)))
+  expect_false(is_model(quote(mod$other)))
+  expect_false(is_model(quote(other$ui)))
+  # things that are not models
+  expect_false(is_model(quote(eigen(A))))
+  expect_false(is_model(quote(chol(A))))
+  expect_false(is_model(42))
+  expect_false(is_model(quote(A %*% B)))
+})
+
+test_that(".lintIsContainer finds lists of models", {
+  acc <- new_acc(modelnames = "mod", containers = "models")
+  is_cont <- function(e) .lintIsContainer(e, acc)
+  expect_true(is_cont(quote(models)))
+  expect_true(is_cont(quote(list(a = mod))))
+  expect_true(is_cont(quote(list(a = readModelDb("X")))))
+  expect_true(is_cont(quote(c(mod, models))))
+  expect_true(is_cont(quote(lapply(c("X", "Y"), readModelDb))))
+  expect_false(is_cont(quote(list(1, 2))))
+  expect_false(is_cont(quote(lapply(xs, f))))
+  expect_false(is_cont(quote(mod)))
+})
+
+test_that(".lintIsEvents counts a whole event table, not something taken from one", {
+  acc <- new_acc(eventnames = c("ev", "obs_rows"))
+  is_ev <- function(e) .lintIsEvents(e, acc)
+  # a name holding one, builders, inline dosing records, and combinations
+  expect_true(is_ev(quote(ev)))
+  expect_true(is_ev(quote(et(amt = 100))))
+  expect_true(is_ev(quote(rxode2::et(c(0, 1000)))))
+  expect_true(is_ev(quote(data.frame(id = 1, time = 0, amt = 100))))
+  expect_true(is_ev(quote(data.frame(id = 1, time = 1, evid = 0))))
+  expect_true(is_ev(quote(obs_rows(1L, 1:3))))
+  expect_true(is_ev(quote(rbind(dose_rows, ev))))
+  expect_true(is_ev(quote(do.call(rbind, lapply(ids, obs_rows, times = 1:3)))))
+  expect_true(is_ev(quote(function(id) data.frame(id = id, evid = 0L))))
+  expect_true(is_ev(quote(function(id) { x <- 1; data.frame(id = id, amt = 1) })))
+  # not event-like
+  expect_false(is_ev(quote(ev$time)))
+  expect_false(is_ev(quote(ev[["id"]])))
+  expect_false(is_ev(quote(ev[1, ])))
+  expect_false(is_ev(quote(ev * 2)))
+  expect_false(is_ev(quote(crossprod(ev))))
+  expect_false(is_ev(quote(t(X) %*% ev$amt)))
+  expect_false(is_ev(quote(data.frame(id = 1, time = 1))))
+  expect_false(is_ev(quote(matrix(1:4, 2))))
+  expect_false(is_ev(quote(A)))
+  expect_false(is_ev(3))
+})
+
+test_that(".lintSolveKind separates model solves, untraceable simulations and matrix solves", {
+  acc <- new_acc(modelnames = "mod", eventnames = "ev")
+  kind <- function(e) .lintSolveKind(e, acc)
+  expect_identical(kind(quote(solve(mod, x))), "rxSolve")
+  expect_identical(kind(quote(solve(x, mod))), "rxSolve")
+  expect_identical(kind(quote(solve(readModelDb("X"), x))), "rxSolve")
+  expect_identical(kind(quote(solve(other, ev))), "solve-unresolved")
+  expect_identical(kind(quote(solve(other, et(amt = 1)))), "solve-unresolved")
+  expect_identical(kind(quote(solve(other, atol = 1e-8))), "solve-unresolved")
+  expect_identical(kind(quote(solve(other, params = p))), "solve-unresolved")
+  expect_true(is.na(kind(quote(solve(A)))))
+  expect_true(is.na(kind(quote(solve(A, b)))))
+  expect_true(is.na(kind(quote(solve(A, b, tol = 1e-10)))))
+  # taken from or computed on an event table: matrix algebra
+  expect_true(is.na(kind(quote(solve(crossprod(X), crossprod(X, ev$time))))))
+  expect_true(is.na(kind(quote(solve(t(X) %*% X, t(X) %*% ev$amt)))))
+  expect_true(is.na(kind(quote(solve(ev$vectors, c(amt, 0, 0))))))
+})
+
+test_that(".lintCallStates reads only the call's own arguments and its control", {
+  states <- function(code) .lintCallStates(parse(text = code, keep.source = FALSE)[[1L]])
+  # stated, in the call itself
+  expect_true(states("rxSolve(m, e, addlKeepsCov = TRUE)"))
+  expect_true(states("rxSolve(m, e, addlKeepsCov = FALSE)"))
+  expect_true(states("rxSolve(m, e, nonmem = TRUE)"))
+  expect_true(states("rxSolve(m, e, nonmem = T)"))
+  # a variable states the setting, though its value cannot be read
+  expect_true(states("rxSolve(m, e, addlKeepsCov = flag)"))
+  expect_true(states("rxSolve(m, e, nonmem = nm)"))
+  # inside rxControl() or a control = list()
+  expect_true(states("rxSolve(m, e, control = rxControl(addlKeepsCov = TRUE))"))
+  expect_true(states("rxSolve(m, e, control = list(nonmem = TRUE))"))
+  expect_true(states("rxSolve(m, e, rxControl(nonmem = TRUE))"))
+  # not stated
+  expect_false(states("rxSolve(m, e)"))
+  expect_false(states("rxSolve(m, e, nonmem = FALSE)"))
+  expect_false(states("rxSolve(m, e, nonmem = F)"))
+  expect_false(states("rxSolve(m, e, nonmem = NULL)"))
+  expect_false(states("rxSolve(m, e, addlKeepsCov = NULL)"))
+  expect_false(states("rxSolve(m, e, control = ctl)"))
+  expect_false(states("rxSolve(m, e, 'addlKeepsCov')"))
+  # another call's argument is not this call's
+  expect_false(states("rxSolve(m, e, foo(addlKeepsCov = TRUE))"))
+  expect_false(states("rxSolve(m, e, foo(nonmem = TRUE))"))
+  expect_false(states("rxSolve(m, e, list(addlKeepsCov = TRUE))"))
+  expect_false(states("rxSolve(m, e, control = foo(addlKeepsCov = TRUE))"))
+  expect_false(states("rxSolve(m, e, note = 'addlKeepsCov = TRUE')"))
+})
+
+test_that(".lintWalkSolves records each place the model is solved, in order", {
+  acc <- new_acc(modelnames = "mod")
+  code <- c(
+    "a <- rxode2::rxSolve(mod, ev)",
+    "b <- solve(mod, ev, addlKeepsCov = TRUE)",
+    'c <- nlmixr2(mod, dat, est = "rxSolve")',
+    "d <- simulate(fit)",
+    "e <- do.call(rxSolve, args)",
+    "f <- solve(A)")
+  for (e in as.list(parse(text = code, keep.source = FALSE))) .lintWalkSolves(e, acc)
+  expect_identical(vapply(acc$sites, function(s) s$kind, ""),
+                   c("rxSolve", "rxSolve", "est-rxSolve", "simulate", "indirect"))
+  expect_identical(vapply(acc$sites, function(s) s$stated, NA),
+                   c(FALSE, TRUE, FALSE, FALSE, FALSE))
+  expect_identical(acc$sites[[2L]]$text, "solve(mod, ev, addlKeepsCov = TRUE)")
+  # nothing in it is a simulation
+  acc <- new_acc()
+  for (e in as.list(parse(text = c("x <- 1", "y <- foo(x)", "A <- solve(M)"),
+                          keep.source = FALSE))) .lintWalkSolves(e, acc)
+  expect_identical(acc$sites, list())
+})
+
+# --- forms that used to pass silently ---------------------------------------------
+
+lagged_one <- function(code, model = make_lag_model(), ...) {
+  lint_vignette(write_article(code, ...), model = model)
+}
+
+test_that("a model reached through a list, a loop or $ui is resolved", {
+  skip_if_not_installed("rxode2")
+  from_db <- 'mod <- readModelDb("X")'
+  for (code in list(
+    c('models <- list(a = readModelDb("X"))', "sim <- solve(models$a, ev)"),
+    c(from_db, "models <- list(a = mod)", "sim <- solve(models$a, ev)"),
+    c(from_db, "models <- list(a = mod)", 'sim <- solve(models[["a"]], ev)'),
+    c(from_db, "models <- list(a = mod)", "models$b <- mod", "sim <- solve(models$b, ev)"),
+    c('models <- lapply(c("X", "Y"), readModelDb)', "sim <- solve(models[[1]], ev)"),
+    c(from_db, "for (m in list(mod)) sim <- solve(m, ev)"),
+    c(from_db, "models <- list(mod)", "for (m in models) sim <- solve(m, ev)"),
+    c(from_db, "ui <- mod$ui", "sim <- solve(ui, ev)"),
+    c(from_db, "sim <- with(list(m = mod), solve(m, ev))"),
+    c(from_db, "sim <- lapply(list(mod), function(m) solve(m, ev))"),
+    c(from_db, "sim <- purrr::map(list(mod), ~ solve(.x, ev))")
+  )) {
+    res <- lagged_one(code)
+    expect_identical(lagged_checks(res), "addlkeepscov-unstated",
+                     info = paste(code, collapse = " / "))
+    expect_match(res$issues$message, "`solve(", fixed = TRUE)
+  }
+  # a loop variable does not leak into code that follows the scoped call
+  res <- lagged_one(c(from_db, "x <- lapply(list(mod), function(m) m)",
+                      "y <- solve(m, ev)"))
+  expect_identical(res$n, 0L)
+})
+
+test_that("a solve() on a parameter of a local function is resolved at the call", {
+  skip_if_not_installed("rxode2")
+  from_db <- 'mod <- readModelDb("X")'
+  for (def in list(
+    "runsim <- function(m, e) solve(m, e)",
+    "runsim <- function(m, e) m |> solve(e)",
+    "runsim <- function(m, e) solve(m, e, atol = 1e-8)",
+    "runsim <- function(e, m) { out <- solve(m, e); out }")) {
+    res <- lagged_one(c(from_db, def, "a <- runsim(mod, ev)", "b <- runsim(mod, ev2)"))
+    # reported once, at the definition, whatever the number of calls
+    expect_identical(lagged_checks(res), "addlkeepscov-unstated", info = def)
+    expect_match(res$issues$message, "`solve(m, e", fixed = TRUE)
+  }
+  # arguments matched by name
+  res <- lagged_one(c(from_db, "runsim <- function(m, e) solve(m, e)",
+                      "a <- runsim(e = ev, m = mod)"))
+  expect_identical(lagged_checks(res), "addlkeepscov-unstated")
+  # defined but never called with a model: not a simulation
+  res <- lagged_one(c(from_db, "runsim <- function(m, e) solve(m, e)",
+                      "a <- runsim(A, b)"))
+  expect_identical(res$n, 0L)
+  res <- lagged_one(c(from_db, "pinv <- function(m) t(m) %*% solve(m %*% t(m))"))
+  expect_identical(res$n, 0L)
+  # stating the setting in the definition clears it
+  res <- lagged_one(c(from_db, "runsim <- function(m, e) solve(m, e, addlKeepsCov = TRUE)",
+                      "a <- runsim(mod, ev)"))
+  expect_identical(res$n, 0L)
+  # an event-like solve in a function never given a model stays reported
+  res <- lagged_one(c("runsim <- function(m, e) solve(m, e, atol = 1e-8)"))
+  expect_identical(lagged_checks(res), "addlkeepscov-unverifiable")
+})
+
+test_that("a solve() the article defines itself is judged by the rxSolve() inside it", {
+  skip_if_not_installed("rxode2")
+  res <- lagged_one(c(
+    'mod <- readModelDb("X")',
+    "solve <- function(ev, ...) rxode2::rxSolve(mod, ev, maxsteps = 1e6, ...)",
+    "a <- solve(ev1, atol = 1e-8)",
+    "b <- solve(ev2)"))
+  expect_identical(lagged_checks(res), "addlkeepscov-unstated")
+  expect_match(res$issues$message, "`rxode2::rxSolve(mod, ev, maxsteps = 1e+06, ...)`", fixed = TRUE)
+})
+
+test_that("solve passed as a value is reported when it travels with a model", {
+  skip_if_not_installed("rxode2")
+  from_db <- 'mod <- readModelDb("X")'
+  for (code in list(
+    "x <- lapply(list(mod), solve, events = ev)",
+    "x <- purrr::map(list(mod), solve, ev)",
+    "x <- Map(solve, list(mod), list(ev))",
+    "x <- do.call(solve, list(mod, ev))",
+    'x <- do.call("solve", list(mod, ev))',
+    'f <- match.fun("solve")',
+    'f <- get("solve")',
+    "x <- lapply(list(ev), solve, mod)"
+  )) {
+    expect_identical(lagged_checks(lagged_one(c(from_db, code))),
+                     "addlkeepscov-unverifiable", info = code)
+  }
+  # matrix algebra: solve as a value with nothing model-like beside it
+  for (code in c("x <- lapply(mats, solve)", "x <- sapply(mats, solve, b = 1)",
+                 "x <- do.call(solve, args)", "f <- solve")) {
+    expect_identical(lagged_one(c(from_db, code))$n, 0L, info = code)
+  }
+})
+
+test_that("rxSolve passed to another function or hidden behind a wrapper is still seen", {
+  skip_if_not_installed("rxode2")
+  flagged <- function(code) lagged_checks(lagged_one(code))
+  expect_identical(flagged("x <- purrr::map(evs, ~ rxode2::rxSolve(mod, .x))"), "addlkeepscov-unstated")
+  expect_identical(flagged("x <- Map(function(e) rxSolve(mod, e), evs)"), "addlkeepscov-unstated")
+  expect_identical(flagged("x <- with(list(m = mod), rxSolve(m, ev))"), "addlkeepscov-unstated")
+  expect_identical(flagged("x <- local({ rxSolve(mod, ev) })"), "addlkeepscov-unstated")
+  expect_identical(flagged("x <- purrr::map(evs, rxode2::rxSolve, object = mod)"),
+                   "addlkeepscov-unverifiable")
+  expect_identical(flagged("x <- Map(rxSolve, list(mod), list(ev))"), "addlkeepscov-unverifiable")
+  expect_identical(flagged('x <- do.call("rxSolve", args)'), "addlkeepscov-unverifiable")
+})
+
+test_that("an unparsed chunk counts as a solver only when it can be about a model", {
+  skip_if_not_installed("rxode2")
+  # rxSolve is a solver wherever it appears
+  expect_identical(lagged_checks(lagged_one("x <- rxSolve(mod, (ev")),
+                   "addlkeepscov-unverifiable")
+  # a bare solve( needs the article to work with a model
+  expect_identical(lagged_checks(lagged_one(c('mod <- readModelDb("X")', "x <- solve(mod, (ev"))),
+                   "addlkeepscov-unverifiable")
+  expect_identical(lagged_one("x <- solve(A, (b")$n, 0L)
+  # ... the model's own name is enough
+  expect_identical(
+    lagged_checks(lagged_one("x <- solve(Some_Model, (ev", model = "Some_Model")),
+    "addlkeepscov-model")
+})
+
+# --- matrix algebra beside an event table ------------------------------------------
+
+test_that("least-squares matrix solves are not simulations even beside dosing rows", {
+  skip_if_not_installed("rxode2")
+  dat <- c("dat <- data.frame(id = 1, time = 0:3, amt = c(100, 0, 0, 0), evid = c(1, 0, 0, 0))",
+           "X <- model.matrix(~ time, dat)")
+  expect_identical(
+    lagged_one(c(dat, "b <- solve(crossprod(X), crossprod(X, dat$time))"))$n, 0L)
+  expect_identical(
+    lagged_one(c(dat, "b <- solve(t(X) %*% X, t(X) %*% dat$amt)"))$n, 0L)
+  expect_identical(lagged_one(c(dat, "b <- solve(X[1:2, ], dat[1:2, 2])"))$n, 0L)
+  # the event table passed whole is event-like
+  expect_identical(lagged_checks(lagged_one(c(dat, "b <- solve(other, dat)"))),
+                   "addlkeepscov-unverifiable")
+})
+
+# --- what counts as stating the setting, end to end ---------------------------------
+
+test_that("the setting must be in the call or its control, and a variable counts", {
+  skip_if_not_installed("rxode2")
+  flagged <- function(args) {
+    res <- lagged_one(sprintf("sim <- rxode2::rxSolve(mod, ev, %s)", args))
+    identical(lagged_checks(res), "addlkeepscov-unstated")
+  }
+  for (args in c("foo(addlKeepsCov = TRUE)", "foo(nonmem = TRUE)",
+                 "addlKeepsCov = NULL", "nonmem = NULL", "nonmem = FALSE",
+                 "control = ctl", "control = foo(nonmem = TRUE)")) {
+    expect_true(flagged(args), info = args)
+  }
+  for (args in c("addlKeepsCov = keep", "nonmem = nm", "nonmem = T",
+                 "control = list(addlKeepsCov = TRUE)",
+                 "control = rxControl(nonmem = TRUE)", "rxControl(addlKeepsCov = FALSE)")) {
+    expect_false(flagged(args), info = args)
+  }
+})
+
+# --- nlmixr2(est =), rxSolve spellings, eval = FALSE ---------------------------------
+
+test_that("nlmixr2(est = ) is read for rxSolve anywhere in est, and a non-literal est is reported", {
+  skip_if_not_installed("rxode2")
+  unverifiable <- function(code) {
+    identical(lagged_checks(lagged_one(code)), "addlkeepscov-unverifiable")
+  }
+  expect_true(unverifiable('x <- nlmixr2(mod, dat, est = "rxSolve")'))
+  expect_true(unverifiable('x <- nlmixr2(mod, dat, est = c("rxSolve"))'))
+  expect_true(unverifiable('x <- nlmixr2(mod, dat, est = c("focei", "rxSolve"))'))
+  expect_true(unverifiable('x <- nlmixr2(mod, dat, "rxSolve")'))
+  expect_true(unverifiable("x <- nlmixr2(mod, dat, est = est_name)"))
+  expect_true(unverifiable("x <- nlmixr2(mod, dat, est = paste0('r', 'xSolve'))"))
+  expect_true(unverifiable('x <- nlmixr2::nlmixr(mod, dat, est = "rxSolve")'))
+  expect_identical(lagged_one('x <- nlmixr2(mod, dat, est = "focei")')$n, 0L)
+  expect_identical(lagged_one('x <- nlmixr2(mod, dat, est = c("focei", "saem"))')$n, 0L)
+  expect_identical(
+    lagged_one('x <- nlmixr2(mod, dat, est = "rxSolve", control = rxControl(addlKeepsCov = TRUE))')$n,
+    0L)
+})
+
+test_that("rxSolve.default is rxSolve, and naming rxSolve without using it is not a use", {
+  skip_if_not_installed("rxode2")
+  expect_identical(lagged_checks(lagged_one("x <- rxode2::rxSolve.default(mod, ev)")),
+                   "addlkeepscov-unstated")
+  expect_identical(lagged_checks(lagged_one("x <- rxSolve.default(mod, ev)")),
+                   "addlkeepscov-unstated")
+  expect_identical(lagged_one("x <- rxSolve.default(mod, ev, nonmem = TRUE)")$n, 0L)
+  for (code in c("?rxSolve", "args(rxSolve)", "formals(rxode2::rxSolve)",
+                 "body(rxSolve)", "environment(rxSolve)", "help(rxSolve)")) {
+    expect_identical(lagged_one(code)$n, 0L, info = code)
+  }
+})
+
+test_that("a chunk that does not run is not scanned", {
+  skip_if_not_installed("rxode2")
+  call <- "sim <- rxode2::rxSolve(mod, ev)"
+  for (header in c("```{r, eval = FALSE}", "```{r name, echo = TRUE, eval=FALSE}",
+                   "```{r eval = F}")) {
+    expect_identical(lagged_one(call, header = header)$n, 0L, info = header)
+  }
+  expect_identical(lagged_one(c("#| eval: false", call))$n, 0L)
+  # eval = TRUE, an unrelated option, and a non-literal eval all run
+  for (header in c("```{r, eval = TRUE}", "```{r, echo = FALSE}", "```{r, eval = run}")) {
+    expect_identical(lagged_checks(lagged_one(call, header = header)),
+                     "addlkeepscov-unstated", info = header)
+  }
+  # an unparseable solver mention in a chunk that does not run is skipped too
+  expect_identical(lagged_one("x <- rxSolve(mod, (ev", header = "```{r, eval = FALSE}")$n, 0L)
+  # only the chunk that does not run is skipped
+  rmd <- withr::local_tempfile(fileext = ".Rmd")
+  writeLines(c("```{r, eval = FALSE}", call, "```", "```{r}", call, "```"), rmd)
+  expect_identical(lagged_checks(lint_vignette(rmd, model = make_lag_model())),
+                   "addlkeepscov-unstated")
+  # the other lint rules still read a chunk that does not run
+  expect_identical(.lintRcode(rmd), c(call, call))
+  chunks <- .lintRchunks(rmd)
+  expect_false(chunks[[1L]] |> attr("eval"))
+  expect_null(attr(chunks[[2L]], "eval"))
+})
+
+# --- a model that cannot be read is reported, not skipped ------------------------------
+
+test_that("a failure reading the model's covariates is reported", {
+  skip_if_not_installed("rxode2")
+  testthat::local_mocked_bindings(
+    .lintModelCovariates = function(ui) stop("covariates boom", call. = FALSE))
+  res <- lagged_one("sim <- rxode2::rxSolve(mod, ev)")
+  expect_identical(res$issues$check, "addlkeepscov-model")
+  expect_match(res$issues$message, "covariates boom", fixed = TRUE)
+  expect_match(res$issues$message, "the supplied model", fixed = TRUE)
+})
+
+test_that("a model whose statements cannot be read is an error, not an empty result", {
+  expect_error(.lintLaggedFCovariates(list(lstExpr = NULL)), "no readable statements")
+  expect_error(.lintModelCovariates(list(meta = NULL, allCovs = NULL)), NA)
+  expect_identical(.lintModelCovariates(list(meta = list(covariateData = list(A = 1, B = 2)),
+                                             allCovs = c("B", "C"))),
+                   c("A", "B", "C"))
+})
+
+# --- known over-approximations, pinned ---------------------------------------------------
+
+test_that("alag() and f() are not tied to the same compartment", {
+  skip_if_not_installed("rxode2")
+  ui <- rxode2::rxode2(make_lag_model(f = "f(central) <- exp(lf) * (1 + e_fed * FED)"))
+  expect_identical(.lintLaggedFCovariates(ui), "FED")
+  expect_identical(
+    lagged_checks(lagged_one("sim <- rxode2::rxSolve(mod, ev)",
+                             model = make_lag_model(f = "f(central) <- exp(lf) * (1 + e_fed * FED)"))),
+    "addlkeepscov-unstated")
+})
+
+test_that("assignments are not ordered: every right-hand side a variable gets counts", {
+  skip_if_not_installed("rxode2")
+  cov_of <- function(...) .lintLaggedFCovariates(rxode2::rxode2(make_lag_model(...)))
+  # a covariate that a later assignment overwrites with a constant
+  expect_identical(cov_of(pre = c("fx <- FED", "fx <- 1"), f = "f(depot) <- fx"), "FED")
+  # a variable read by f() before it is assigned: the read counts, and rxode2
+  # itself then takes `fx` for a data column, so it is listed as well
+  expect_identical(cov_of(f = c("f(depot) <- fx", "fx <- exp(lf) * (1 + e_fed * FED)")),
+                   c("FED", "fx"))
+  # a covariate reached only through an if() branch of f() itself
+  expect_identical(cov_of(f = "if (FED > 0) f(depot) <- 0.8 else f(depot) <- 1"), "FED")
+})
+
+test_that("an article with several models takes the union of their covariates", {
+  skip_if_not_installed("rxode2")
+  skip_if_not_installed("nlmixr2lib")
+  skip_if_not(all(c("Hughes_2022_brepocitinib", "PK_1cmt") %in% nlmixr2lib::modeldb$name))
+  # PK_1cmt has no alag(), so its own simulation needs nothing; the article
+  # still reports it because Hughes_2022_brepocitinib is in the article too.
+  rmd <- write_article(c('hughes <- readModelDb("Hughes_2022_brepocitinib")',
+                         'pk <- readModelDb("PK_1cmt")',
+                         "a <- rxode2::rxSolve(hughes, ev)",
+                         "b <- rxode2::rxSolve(pk, ev)"))
+  res <- lint_vignette(rmd)
+  expect_identical(lagged_checks(res), rep("addlkeepscov-unstated", 2L))
+  expect_match(res$issues$message[[2L]], "`rxode2::rxSolve(pk, ev)`", fixed = TRUE)
+})
