@@ -10,7 +10,9 @@ lint_vignette(rmd, model = NULL, max_per_arm = 200L)
 \item{rmd}{Path to the vignette \code{.Rmd}.}
 
 \item{model}{Optional \code{rxUi} / model function / \code{nlmixr2lib} name; enables the
-algebraic-observable \verb{cmt =} check.}
+algebraic-observable \verb{cmt =} check and the lagged-dose check. The
+lagged-dose check falls back to the names the vignette passes to
+\code{readModelDb()} when no model is given.}
 
 \item{max_per_arm}{Maximum simulated participants per arm (default 200).}
 }
@@ -23,4 +25,18 @@ recurring failures that otherwise only surface during an expensive render:
 an oversized simulation cohort, a missing \verb{cmt =} for an algebraic
 observable (the most common slot-renumbering failure), a named-vector scalar
 passed to \verb{amt =}, and a PKNCA input filter that drops the \code{time = 0} row.
+}
+\details{
+It also checks the lagged-dose bioavailability rule. When the model has an
+\code{alag()} statement and an \code{f()} whose right-hand side depends on a covariate
+(directly, through intermediate assignments, or through an \verb{if()}
+condition), every \code{rxSolve()} call in the article must state
+\verb{addlKeepsCov =} or \code{nonmem = TRUE}: by default rxode2 reads a lagged dose's
+\code{f()} covariates at the dose's arrival time, whereas NONMEM uses the dose
+record's covariates, and the two differ when the covariate changes between
+occasions. \code{rxSolve()} calls are recognised however they are written
+(\code{rxode2::rxSolve()}, piped, arguments over several lines). A simulation run
+through \code{nlmixr2(..., est = "rxSolve")}, \code{simulate()}, or an \code{rxSolve} passed
+to another function cannot be read statically and is reported as not
+verifiable unless the call itself names the setting.
 }

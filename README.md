@@ -68,7 +68,12 @@ API — but never reimplements model **validation**, which stays in
   vignette for the common render-killers (a `cmt =` referencing an algebraic
   observable, a named-vector character subscript to `amt =`, a PKNCA
   `time = 0`-dropping filter, a simulated cohort over the per-arm cap) *before*
-  the expensive render, so they are fixed without a render round-trip.
+  the expensive render, so they are fixed without a render round-trip. It also
+  requires every `rxSolve()` call to state `addlKeepsCov =` or `nonmem = TRUE`
+  when the model has `alag()` and an `f()` that depends on a covariate (rxode2
+  and NONMEM read a lagged dose's covariates at different records); simulations
+  through `nlmixr2(est = "rxSolve")` or `simulate()` are reported as not
+  verifiable.
   High-precision (numeric `amt` subscripts and non-PKNCA filters are not flagged);
   a prior, not a gate. CLI: `inst/scripts/lint_vignette.R`.
 - **Naming pre-brief** — `naming_prebrief()` resolves a paper's covariates (and

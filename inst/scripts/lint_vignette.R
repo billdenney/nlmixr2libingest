@@ -1,14 +1,18 @@
 #!/usr/bin/env Rscript
 # lint_vignette.R -- CLI: static, pre-render lint of a validation vignette for
 # the common render-killers (oversized cohort, missing cmt= for an algebraic
-# observable, named-vector amt=, PKNCA time=0-dropping filter). Catches them
-# BEFORE the expensive render. Exit: 0 = clean, 1 = issues, 2 = usage error.
+# observable, named-vector amt=, PKNCA time=0-dropping filter) and for a
+# simulation that does not state addlKeepsCov / nonmem = TRUE although the model
+# has alag() and an f() that depends on a covariate. Catches them BEFORE the
+# expensive render. Exit: 0 = clean, 1 = issues, 2 = usage error.
 #
 # Usage:
 #   Rscript lint_vignette.R <vignette.Rmd> [model] [--max-per-arm N]
 #     <vignette.Rmd>   path to the validation vignette
 #     [model]          nlmixr2lib model name or path to its .R (enables the
-#                      algebraic-observable cmt= check)
+#                      algebraic-observable cmt= check and the lagged-dose
+#                      addlKeepsCov check; the latter falls back to the names
+#                      the vignette passes to readModelDb())
 #     --max-per-arm N  per-arm simulation cap (default 200)
 
 args <- commandArgs(trailingOnly = TRUE)

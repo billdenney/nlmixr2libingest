@@ -55,3 +55,46 @@ make_fixture_refs <- function(extra_cov = NULL) {
   writeLines(par, file.path(dir, "parameter-names.md"))
   dir
 }
+
+# A minimal rxode2 model function with a depot, a central compartment and the
+# covariates FED (documented) and WT (on clearance only). `pre` adds statements
+# before the ODEs; `f` and `lag` are the bioavailability and lag statements
+# (NULL omits them); `covariate_data = FALSE` drops the covariateData list so
+# the covariates are only the ones rxode2 detects.
+make_lag_model <- function(pre = character(),
+                           f = "f(depot) <- exp(lf) * (1 + e_fed * FED)",
+                           lag = "alag(depot) <- exp(ltlag)",
+                           covariate_data = TRUE) {
+  cov_line <- paste0(
+    "covariateData <- list(",
+    'FED = list(description = "fed", units = "(binary)", type = "binary"), ',
+    'WT = list(description = "weight", units = "kg", type = "continuous"))')
+  txt <- c(
+    "function() {",
+    if (covariate_data) cov_line,
+    "ini({",
+    "  lka <- log(1); lcl <- log(2); lvc <- log(10); prop.sd <- 0.1",
+    "})",
+    "model({",
+    "  ka <- exp(lka); cl <- exp(lcl) * (WT / 70)^0.75; vc <- exp(lvc)",
+    # Constants live in model(), not ini(): rxode2 rejects an ini() parameter
+    # the model never reads, and `f` / `lag` may be NULL.
+    "  lf <- 0; e_fed <- -0.2; ltlag <- -0.7",
+    pre,
+    "  d/dt(depot) <- -ka * depot",
+    "  d/dt(central) <- ka * depot - cl / vc * central",
+    f,
+    lag,
+    "  Cc <- central / vc",
+    "  Cc ~ prop(prop.sd)",
+    "})",
+    "}")
+  eval(parse(text = txt))
+}
+
+# An article (Rmd) holding `code` in one R chunk.
+write_article <- function(code, env = parent.frame()) {
+  rmd <- withr::local_tempfile(fileext = ".Rmd", .local_envir = env)
+  writeLines(c("---", "title: t", "---", "", "```{r}", code, "```"), rmd)
+  rmd
+}
