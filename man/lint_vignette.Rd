@@ -203,10 +203,19 @@ The finding says how many lagged doses are affected and names one: its time
 and subject, the covariate, both values and the record. The setting is the
 one the call states as a literal (\code{addlKeepsCov}, \code{nonmem}, in an inline
 \code{rxControl()} or \code{control = list()}), \code{FALSE} when it states none, and all
-three when it cannot be read (a variable, \code{tieOrder}). The lag time of each
-dose is the model's \code{alag()} evaluated at the initial estimates, with every
-eta 0 and the dose record's covariates; when that cannot be computed only the
-records at the dose's own time are checked and the finding says so. A fixed
+three when it cannot be read (a variable, \code{tieOrder}, an unnamed extra
+argument that may be a control object, or an \code{options()} call that sets an
+rxode2 option anywhere in the article). The lag time of each dose is the
+model's \code{alag()} evaluated at the initial estimates and the dose record's
+covariates. When that cannot be computed, or the lag reads a random effect
+(which differs between subjects), or the call supplies parameters that may
+change it (\code{params} or \code{theta} that is not a literal naming other things,
+\code{thetaMat}, \code{iCov}, an unnamed extra argument), the lag is not known and the
+window is every record up to the dose's next dose: a lag shorter than the
+dosing interval cannot reach further, so a table whose records up to the next
+dose all carry the dose's covariates is clean, and a difference is reported
+with a note that the lag was not known. A lag longer than the dosing interval
+is not seen then. A fixed
 rate under \code{TRUE} or \code{nonmem = TRUE} may read any record of the subject, so
 any difference is reported. The table that makes every \code{FALSE} setting clean
 is the one in \emph{Which setting}: each record carries the covariates of the dose
@@ -225,7 +234,11 @@ utils, tibble, tidyr, purrr, dplyr and rxode2's event-table builders
 (\code{et()}, \code{add.dosing()}, ...), so a call to anything else (file access,
 \code{system()}, \code{eval()}, \code{readModelDb()}, \code{rxSolve()}, a model) is refused before
 anything runs, whatever spelling reaches it, and is reported as not
-verifiable. A run is limited to 20 seconds and 3 million rows, an article to
+verifiable. Functions that evaluate a string argument as a glue template or as
+the name of a function outside the list (\code{tidyr::pivot_wider(names_glue =)},
+\code{pivot_longer()}, \code{unnest_longer()}, \code{dplyr::rename_with()}, \code{stats::ave()})
+are left out of it for that reason; the list was audited by calling each
+function with hostile payloads in every parameter. A run is limited to 20 seconds and 3 million rows, an article to
 20 simulations, and the session's random-number stream is put back
 afterwards. This guards an article's own code against its accidents; it is
 not a boundary against hostile code.
@@ -239,20 +252,23 @@ frame or event table, has no numeric \code{time} column or is empty; a build tha
 fails or runs over the limits; a simulation that is not an \code{rxSolve()} or
 \code{solve(model, ...)} call whose arguments can be read (\code{do.call()},
 \code{nlmixr2()}, \code{simulate()}); a helper the article never calls at the top level,
-or an anonymous function whose parameter is not one the rule binds; the model
-changed by \code{model()} in the article; and, with several models that have a
-lagged dose, a simulation whose model cannot be told. A simulation of another
+or an anonymous function whose parameter is not one the rule binds; a model
+that cannot be read or analysed; the model changed by \code{model()} in the
+article; and, with several models that have a lagged dose, a simulation whose
+model cannot be told. A simulation of another
 library model (read from a different literal name) is not about the lagged
 dose and is skipped.
 
 \emph{What it does not check.} Doses expanded by \code{addl}, because the pairing of an
 expanded dose was not measured. Next to another dose the measurements are
 partial (a bolus's \code{f()} and a dose into another compartment): a dose at the
-dose's time or inside the lag window is a candidate for every quantity and a
-dose at its time makes every later record a candidate for \code{rate()} and
-\code{dur()}. A loop or an apply-family function is run for its first element
-only. Etas are 0 in the lag time, so a lag longer than the dosing interval
-that only some subjects reach is not seen. The compartment of a numeric \code{cmt}
+dose's time or inside the lag window is a candidate for every quantity, a dose
+at its time makes the next record after it a candidate for \code{rate()} and \code{dur()}, and
+so is an earlier dose still in its lag when the dose is recorded (a lagged dose
+into another compartment supplies \code{rate()} and \code{dur()} only if it is recorded
+no earlier than the dose and arrives no later, or is recorded earlier and
+arrives later). A loop or an apply-family function is run for its first element
+only. The compartment of a numeric \code{cmt}
 is its position among the model's states. A covariate the table does not
 carry as a column (an \code{iCov}, a constant) cannot differ between records and
 is not compared.

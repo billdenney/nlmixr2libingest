@@ -18,6 +18,17 @@
 #   * the run has a time limit and a row cap, and the session's RNG state is put
 #     back afterwards (set.seed() and the r*() draws are allowed).
 #
+# What this does not guarantee. A listed function that evaluates a string its
+# caller passes -- a glue template (tidyr::pivot_wider(names_glue = )) or the name
+# of a function (tidyr::pivot_longer(values_transform = list(v = "name")),
+# dplyr::rename_with(.fn = "name")) -- looks it up in the caller's frame or the
+# global environment, outside the list. Such functions are not listed
+# (.lintSandboxExcluded), and test-lint-sandbox.R runs a canary through each
+# function family that takes such an argument. The list was audited by calling
+# every listed function with every one of its parameters set to hostile payloads;
+# a function added later needs the same audit. This is a guard against the
+# accidents of an article's own code, not a boundary against hostile code.
+#
 # A slice that cannot be run is reported to the caller as not verifiable with the
 # reason; it is never skipped.
 
@@ -85,7 +96,7 @@
   "dexp", "pexp", "qexp", "dgamma", "pgamma", "qgamma", "dbeta", "pbeta",
   "qbeta", "dt", "pt", "qt", "dchisq", "pchisq", "qchisq", "dunif", "punif",
   "qunif", "dweibull", "pweibull", "qweibull", "approx", "approxfun", "setNames",
-  "median", "var", "sd", "quantile", "cor", "ave", "aggregate", "weighted.mean",
+  "median", "var", "sd", "quantile", "cor", "aggregate", "weighted.mean",
   "complete.cases", "na.omit", "reshape", "cov", "mad", "IQR", "fivenum",
   "filter", "lag"
 )
@@ -96,9 +107,9 @@
 )
 .lintSandboxTidyr <- c(
   "crossing", "expand_grid", "expand", "nesting", "complete", "fill",
-  "pivot_longer", "pivot_wider", "unnest", "nest", "separate", "unite",
-  "replace_na", "drop_na", "uncount", "full_seq", "unnest_longer",
-  "unnest_wider", "separate_wider_delim", "everything", "all_of", "any_of",
+  "unnest", "nest", "separate", "unite",
+  "replace_na", "drop_na", "uncount", "full_seq",
+  "separate_wider_delim", "everything", "all_of", "any_of",
   "starts_with", "ends_with", "contains", "matches", "where", "last_col"
 )
 .lintSandboxPurrr <- c(
@@ -107,7 +118,7 @@
   "imap", "imap_dfr", "reduce", "accumulate", "keep", "discard", "compact",
   "flatten", "pluck", "list_rbind", "list_cbind", "set_names", "partial",
   "negate", "modify", "modify_at", "map_if", "map_at", "detect", "every", "some",
-  "list_flatten", "list_c", "list_simplify", "pmap_chr", "pmap_int", "map_vec",
+  "list_c", "list_simplify", "pmap_chr", "pmap_int", "map_vec",
   "map2_vec", "reduce2", "transpose", "array_branch", "cross", "cross2",
   "cross_df", "as_mapper"
 )
@@ -117,7 +128,7 @@
   "right_join", "inner_join", "full_join", "cross_join", "anti_join",
   "semi_join", "bind_rows", "bind_cols", "distinct", "slice", "slice_head",
   "slice_tail", "slice_min", "slice_max", "slice_sample", "rowwise", "rename",
-  "rename_with", "relocate", "pull", "count", "add_count", "tally", "coalesce",
+  "relocate", "pull", "count", "add_count", "tally", "coalesce",
   "if_else", "case_when", "case_match", "between", "lag", "lead", "first", "last",
   "nth", "across", "everything", "all_of", "any_of", "starts_with", "ends_with",
   "contains", "matches", "where", "pick", "group_split", "group_keys",
@@ -125,12 +136,24 @@
   "cur_group_id", "cur_group", "cur_data", "consecutive_id", "nest_by",
   "pull", "if_any", "if_all", "row_number", "ntile", "percent_rank", "cume_dist",
   "lst", "tibble", "as_tibble", "data_frame", "near", "n_groups", "last_col",
-  "num_range", "one_of", "%>%", "mutate_at", "mutate_all", "mutate_if",
-  "select_at", "rename_at", "summarise_at", "summarise_all", "arrange_at",
-  "filter_at", "group_by_at", "transmute_at"
+  "num_range", "one_of", "%>%"
 )
 # rxode2's event-table builders; they construct a table and run nothing.
 .lintSandboxRxode2 <- c("et", "etRep", "etSeq", "etRbind", "etExpand", "add.dosing", "add.sampling")
+
+# Functions left out of the lists on purpose, and why: each evaluates a string
+# its caller passes, a glue template or the name of a function, outside the
+# sandbox (found by calling every listed function with hostile payloads in every
+# parameter). The scoped dplyr verbs take function names as strings as well and
+# are superseded by across().
+.lintSandboxExcluded <- list(
+  tidyr = c("pivot_wider", "pivot_longer", "unnest_longer", "unnest_wider"),
+  stats = "ave",
+  dplyr = c("rename_with", "mutate_at", "mutate_all", "mutate_if", "select_at",
+            "rename_at", "summarise_at", "summarise_all", "arrange_at", "filter_at",
+            "group_by_at", "transmute_at"),
+  purrr = "list_flatten"
+)
 
 .lintSandboxPackages <- list(
   base = c(.lintSandboxBase, .lintSandboxSyntax),
@@ -219,6 +242,83 @@
   }
   assign("::", .lintSandboxColon, envir = wl)
   wl
+}
+
+# --- auditing the list -----------------------------------------------------------
+
+# Call every listed function with each of its parameters (those whose name
+# matches `pattern`, all of them when NULL) set to hostile payloads -- the name of
+# a function that creates a file, a glue template that runs code, a formula and a
+# lambda built inside the sandbox -- on a data frame, a character vector and a
+# list, with companion arguments that let a structural function (a pivot, an
+# unnest) reach its string arguments, in an empty scratch directory. Returns the
+# calls that left a file there: character() when none did. `quick` uses fewer
+# payloads and companions. The unrestricted audit takes about half an hour; run it
+# after any change to the lists.
+.lintSandboxAudit <- function(pattern = NULL, seconds = 5, extra = list(), quick = FALSE) {
+  wl <- .lintSandboxEnv()
+  # `extra` are further functions to audit as if they were listed (a test of the
+  # audit itself)
+  for (nm in names(extra)) assign(nm, extra[[nm]], envir = wl)
+  pkgs <- c(.lintSandboxPackages, if (length(extra)) list(extra = names(extra)))
+  work <- tempfile("sandbox-audit")
+  dir.create(work)
+  old <- setwd(work)
+  on.exit({
+    setwd(old)
+    unlink(work, recursive = TRUE)
+  }, add = TRUE)
+  payloads <- list(
+    fn_string = "file.create",
+    glue_file = "{file.create('glue_canary')}",
+    glue_shell = "{system('touch glue_shell_canary')}",
+    list_string = list(x = "file.create", name = "file.create", value = "file.create"),
+    formula = quote(~ file.create("formula_canary")),
+    lambda = quote(function(...) file.create("lambda_canary")))
+  firsts <- list(quote(data.frame(x = "canary_x", y = "canary_y", stringsAsFactors = FALSE)),
+                 quote(c("canary_a", "canary_b")),
+                 quote(list(canary_l = "canary_l", canary_m = "canary_m")))
+  extras <- list(
+    none = list(), pivot = list(names_from = quote(x), values_from = quote(y)),
+    cols = list(cols = quote(c(x, y))), col = list(col = quote(x)),
+    one_col = list(quote(x)), two_cols = list(quote(c(x, y))), cols2 = list(quote(x), quote(y)),
+    dotcols = list(.cols = quote(c(x, y))), vars = list(.vars = "x"),
+    pivot_id = list(names_from = quote(x), values_from = quote(y), id_cols = quote(x)),
+    longer = list(cols = quote(c(x, y)), names_to = "nm", values_to = "val"),
+    everything = list(quote(everything())),
+    group_string = list("x"), group_two = list("x", "y"))
+  if (quick) {
+    # the vectors that matter, for a regression test: a function name, a template
+    # and the named-list form, with the companions that reach a pivot, an unnest
+    # and a grouped function (ave(x, "x", FUN = ))
+    payloads <- payloads[c("fn_string", "glue_file", "list_string")]
+    firsts <- firsts[1:2]
+    extras <- extras[c("none", "pivot", "cols", "two_cols", "longer", "group_string")]
+  }
+  escapes <- character()
+  for (pkg in names(pkgs)) {
+    for (nm in unique(pkgs[[pkg]])) {
+      f <- get0(nm, envir = wl, inherits = FALSE)
+      if (!is.function(f) || identical(nm, "set.seed")) next
+      fm <- setdiff(tryCatch(names(formals(f)), error = function(e) NULL), c("...", ""))
+      if (!is.null(pattern)) fm <- fm[grepl(pattern, fm)]
+      for (a in fm) for (pn in names(payloads)) for (first in firsts) for (ex in extras) {
+        unlink(list.files(work, full.names = TRUE, all.files = TRUE, no.. = TRUE), recursive = TRUE)
+        env <- new.env(parent = wl)
+        env$.p <- if (is.language(payloads[[pn]])) eval(payloads[[pn]], env) else payloads[[pn]]
+        call <- as.call(c(list(as.name(nm), first), ex, stats::setNames(list(quote(.p)), a)))
+        tryCatch({
+          setTimeLimit(elapsed = seconds, transient = TRUE)
+          suppressWarnings(suppressMessages(eval(call, env)))
+        }, error = function(e) NULL)
+        setTimeLimit(elapsed = Inf, transient = FALSE)
+        if (length(list.files(work, all.files = TRUE, no.. = TRUE))) {
+          escapes <- c(escapes, sprintf("%s::%s(%s = <%s>)", pkg, nm, a, pn))
+        }
+      }
+    }
+  }
+  unique(escapes)
 }
 
 # --- slicing -------------------------------------------------------------------

@@ -200,11 +200,13 @@ knitr_ran <- function(chunks) {
 # A model whose depot has alag(), f(), rate() and dur(), all reading the
 # covariate OCC; `lag` is the alag() right-hand side.
 make_pair_model <- function(lag = "exp(ltlag) * (1 + OCC)",
-                            f = "exp(lf) * (1 + e_occ * OCC)", pre = character()) {
+                            f = "exp(lf) * (1 + e_occ * OCC)", pre = character(),
+                            ini_extra = character()) {
   txt <- c(
     "function() {",
     'covariateData <- list(OCC = list(description = "occasion", units = "(count)", type = "categorical"))',
-    "ini({ lka <- log(1); lcl <- log(2); lvc <- log(10); prop.sd <- 0.1 })",
+    paste("ini({ lka <- log(1); lcl <- log(2); lvc <- log(10); prop.sd <- 0.1;",
+          paste(ini_extra, collapse = "; "), "})"),
     "model({",
     "  ka <- exp(lka); cl <- exp(lcl); vc <- exp(lvc)",
     "  lf <- 0; e_occ <- -0.2; ltlag <- log(0.25)",

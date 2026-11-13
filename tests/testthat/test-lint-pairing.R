@@ -64,13 +64,13 @@ pair_layouts <- list(
     fixed = list(integer(), integer(), integer()),
     modelled = list(integer(), integer(), integer()),
     rate = list(integer(), integer(), integer())),
-  # lag not known: only a record at the dose's time can be checked for the
-  # settings that read the window
+  # lag not known: the window is every record up to the next dose (here none, so
+  # to the end of the table)
   lag_unknown = list(time = c(0, 20, 24, 24, 24.25), i = 4L, lag = NA_real_,
-    bolus = list(3L, integer(), integer()),
+    bolus = list(c(3L, 5L), integer(), integer()),
     fixed = list(3L, c(1L, 2L, 3L, 5L), c(1L, 2L, 3L, 5L)),
     modelled = list(3L, 2:3, 2:3),
-    rate = list(3L, 3L, integer()))
+    rate = list(c(3L, 5L), c(3L, 5L), 5L))
 )
 
 test_that("the candidate records of every dose type and setting match the measured table", {
@@ -109,12 +109,20 @@ test_that("a dose next to the dose widens the candidates", {
   expect_identical(cand("f", "modelled", "FALSE"), c(1L, 3L))
   expect_identical(cand("f", "fixed", "FALSE"), c(1L, 3L))
   expect_identical(cand("f", "modelled", "TRUE"), c(1L, 3L))
+  # a co-timed dose into ANOTHER compartment supplies like an observation: not the record before
+  same_cmt <- c(FALSE, TRUE, FALSE, FALSE)
+  expect_identical(sort(.lintPairCandidates(time, 2L, 0.5, "f", "modelled", "FALSE", dose, same = same_cmt)), 3L)
+  expect_identical(sort(.lintPairCandidates(time, 2L, 0.5, "f", "fixed", "FALSE", dose, same = same_cmt)), 3L)
   # with an observation at the dose's time the record before is not one under FALSE
   expect_identical(sort(.lintPairCandidates(c(20, 24, 24, 26), 2L, 0.5, "f", "modelled", "FALSE",
                                             c(FALSE, TRUE, FALSE, FALSE))), 3L)
-  # rate() / dur(): the dose at the dose's time, and every later record
+  # rate() / dur(): the dose at the dose's time, and the next record after it
   expect_identical(cand("rate", "modelled", "FALSE"), 3:4)
   expect_identical(cand("rate", "modelled", "nonmem"), 3:4)
+  # of several later records only the next one (or the records at its time)
+  later <- c(24, 24, 25, 25, 30, 50)
+  expect_identical(sort(.lintPairCandidates(later, 1L, 0.5, "rate", "modelled", "FALSE",
+                                            c(TRUE, TRUE, FALSE, FALSE, FALSE, FALSE))), 2:4)
   # without a dose at the dose's time only the observations near it are candidates
   expect_identical(sort(.lintPairCandidates(c(20, 24, 24.2, 26), 2L, 0.5, "rate", "modelled", "FALSE",
                                             c(FALSE, TRUE, FALSE, FALSE))), 3L)
@@ -124,6 +132,24 @@ test_that("a dose next to the dose widens the candidates", {
   # a record written before the dose at its time is not read by nonmem = TRUE unless it is a dose
   expect_identical(.lintPairCandidates(c(24, 24), 2L, 0.5, "rate", "modelled", "nonmem", c(FALSE, TRUE)), integer())
   expect_identical(.lintPairCandidates(c(24, 24), 2L, 0.5, "rate", "modelled", "nonmem", c(TRUE, TRUE)), 1L)
+})
+
+test_that("an earlier dose still in its lag when the dose is recorded is a candidate", {
+  # a dose at 23.8 with lag 0.5 arrives at 24.3, after the dose recorded at 24
+  time <- c(23.8, 24)
+  dose <- c(TRUE, TRUE)
+  expect_identical(.lintPairCandidates(time, 2L, 0.5, "f", "bolus", "FALSE", dose), 1L)
+  expect_identical(.lintPairCandidates(time, 2L, 0.5, "f", "modelled", "TRUE", dose), 1L)
+  expect_identical(.lintPairCandidates(time, 2L, 0.5, "rate", "modelled", "FALSE", dose), 1L)
+  # one that has arrived by then is not
+  expect_identical(.lintPairCandidates(c(23, 24), 2L, 0.5, "rate", "modelled", "FALSE", c(TRUE, TRUE)), integer())
+  # an observation recorded earlier is not a candidate for being "in its lag"
+  expect_identical(.lintPairCandidates(c(23.8, 24), 2L, 0.5, "rate", "modelled", "FALSE", c(FALSE, TRUE)), integer())
+  # with an unknown lag the horizon is the next dose
+  expect_identical(.lintPairCandidates(c(24, 25, 30, 36), 1L, NA_real_, "f", "bolus", "FALSE",
+                                       c(TRUE, FALSE, FALSE, TRUE), horizon = 36), 2:3)
+  expect_identical(.lintPairCandidates(c(24, 25, 30, 36), 1L, NA_real_, "f", "bolus", "FALSE",
+                                       c(TRUE, FALSE, FALSE, TRUE), horizon = 28), 2L)
 })
 
 test_that("an unknown dose type is an error, not an empty answer", {
@@ -509,14 +535,19 @@ test_that("a covariate-dependent lag decides which records are inside the window
   expect_null(pair_diffs(pair_events(recs0, rate = 0), "FALSE", spec))
 })
 
-test_that("when the lag cannot be computed only records at the dose's time are checked, and the row says so", {
+test_that("when the lag cannot be computed every record up to the next dose is checked, and the row says so", {
   skip_if_not_installed("rxode2")
   # the lag reads WT, which the table does not carry
   spec <- pair_spec(lag = "exp(ltlag) * WT")
-  recs <- list(c(0, "d", 2), c(12, "d", 1), c(12, "o", 2), c(12.25, "o", 2))
+  recs <- list(c(0, "d", 2), c(12, "d", 1), c(12, "o", 2), c(12.25, "o", 2), c(40, "o", 2))
   d <- pair_diffs(pair_events(recs, rate = 0), "FALSE", spec)
-  expect_identical(d$cand_time, 12)
+  expect_identical(d$cand_time, c(12, 12.25, 40))
   expect_true(all(is.na(d$lag)))
+  # the dose at 0 stops at the dose at 12: its records up to there are candidates, not the later ones
+  recs0 <- list(c(0, "d", 2), c(5, "o", 1), c(12, "d", 2))
+  d0 <- pair_diffs(pair_events(recs0, rate = 0), "FALSE", spec)
+  expect_identical(d0$time, 0)
+  expect_identical(d0$cand_time, 5)
 })
 
 test_that("no lag means no finding, whatever the table", {
@@ -597,7 +628,7 @@ test_that("a lag that cannot be computed is said in the finding", {
   m <- make_pair_model(lag = "exp(ltlag) * WT")
   res <- pair_lint(c(from_db, naive_table, "sim <- rxode2::rxSolve(mod, ev)"), model = m)
   msg <- res$issues$message[res$issues$check == "lagged-dose-pairing"]
-  expect_match(msg, "The lag time could not be computed from the model's initial estimates, so only records at a dose's own time were checked, not those inside its lag window.", fixed = TRUE)
+  expect_match(msg, "The lag time is not known from the model's initial estimates (it reads a random effect, a parameter the call supplies or a covariate the table does not carry, or could not be computed), so every record up to the dose's next dose was checked, not only those inside its lag window.", fixed = TRUE)
 })
 
 test_that("the table is built by the article's own tidyverse code", {
@@ -841,6 +872,136 @@ test_that("a model changed by the article, or one of several that cannot be told
   expect_identical(.lintSiteSpec(list(origin = NA_character_), specs[1L])$spec$label, "`A`")
 })
 
+# --- what the lag and the setting depend on ------------------------------------------------------
+
+test_that("a bolus beside another occasion's record is reported even when the lag cannot be computed", {
+  skip_if_not_installed("rxode2")
+  # f reads WT; the lag reads AGE, which the table does not carry
+  m <- make_pair_model(lag = "exp(ltlag) * AGE", f = "exp(lf) * (WT / 70)")
+  code <- c(from_db, 'ev <- data.frame(id = 1, time = c(24, 24.25), evid = c(1, 0), amt = c(100, NA),',
+            '                 cmt = c("depot", "central"), WT = c(70, 90))',
+            "sim <- rxode2::rxSolve(mod, ev, addDosing = FALSE)")
+  res <- pair_lint(code, model = m)
+  expect_identical(pair_checks(res), "lagged-dose-pairing")
+  msg <- res$issues$message[res$issues$check == "lagged-dose-pairing"]
+  expect_match(msg, "the dose at time 24 (ID 1) has WT = 70, but its f() may read WT = 90 from the observation or other record at time 24.25", fixed = TRUE)
+  expect_match(msg, "The lag time is not known from the model's initial estimates", fixed = TRUE)
+})
+
+test_that("an unknown lag with nothing different up to the next dose is clean", {
+  skip_if_not_installed("rxode2")
+  m <- make_pair_model(lag = "exp(ltlag) * AGE", f = "exp(lf) * (WT / 70)")
+  code <- c(from_db, 'ev <- data.frame(id = 1, time = c(0, 6, 12, 18), evid = c(1, 0, 1, 0), amt = c(100, NA, 100, NA),',
+            '                 cmt = c("depot", "central", "depot", "central"), WT = c(70, 70, 90, 90))',
+            "sim <- rxode2::rxSolve(mod, ev, addDosing = FALSE)")
+  expect_identical(pair_checks(pair_lint(code, model = m)), character())
+})
+
+test_that("a lag that reads a random effect is not taken at its typical value", {
+  skip_if_not_installed("rxode2")
+  m_eta <- make_pair_model(lag = "exp(ltlag + etalag) * (1 + OCC)", ini_extra = "etalag ~ 0.1")
+  spec <- .lintLagSpec(rxode2::rxode2(m_eta))
+  spec$env <- .lintSandboxEnv()
+  expect_true(spec$cmts[[1L]]$lag_eta)
+  expect_identical(.lintLagTime(spec, spec$cmts[[1L]], list(OCC = 1)), NA_real_)
+  expect_false(.lintLagSpec(rxode2::rxode2(make_pair_model()))$cmts[[1L]]$lag_eta)
+  # the record 3 h after the dose is outside the typical lag (0.5 h) but inside any lag shorter than the interval
+  code <- c(from_db, 'ev <- data.frame(id = 1, time = c(0, 3, 12), evid = c(1, 0, 1), amt = c(100, NA, 100),',
+            '                 cmt = c("depot", "central", "depot"), OCC = c(1, 2, 2))',
+            "sim <- rxode2::rxSolve(mod, ev, addDosing = FALSE)")
+  expect_identical(pair_checks(pair_lint(code, model = make_pair_model(lag = "0.5"))), character())
+  res <- pair_lint(code, model = m_eta)
+  expect_identical(pair_checks(res), "lagged-dose-pairing")
+  expect_match(res$issues$message[res$issues$check == "lagged-dose-pairing"], "The lag time is not known", fixed = TRUE)
+})
+
+test_that("parameters the call supplies make the lag unknown unless they cannot touch it", {
+  skip_if_not_installed("rxode2")
+  # ltlag is assigned in the model body; the lag is 0.5 h with the model's own value
+  m <- make_pair_model(lag = "exp(ltlag)", pre = "ltlag <- log(0.5)")
+  base_code <- c(from_db, 'ev <- data.frame(id = 1, time = c(0, 3, 12), evid = c(1, 0, 1), amt = c(100, NA, 100),',
+                 '                 cmt = c("depot", "central", "depot"), OCC = c(1, 2, 2))')
+  checks <- function(args) pair_checks(pair_lint(c(base_code, sprintf("sim <- rxode2::rxSolve(mod, ev%s)", args)), model = m))
+  expect_identical(checks(""), character())
+  expect_identical(checks(", params = c(unrelated = 1)"), character())
+  expect_identical(checks(", params = c(ltlag = log(5))"), "lagged-dose-pairing")
+  expect_identical(checks(", params = prm"), "lagged-dose-pairing")
+  expect_identical(checks(", theta = prm"), "lagged-dose-pairing")
+  expect_identical(checks(", thetaMat = th"), character())  # ltlag is not an estimated theta of this model
+  expect_identical(checks(", params = c(1, 2)"), "lagged-dose-pairing")
+  # a parameter object given by position
+  expect_identical(checks(", prm"), "lagged-dose-pairing")
+  # omega touches the lag only through an eta
+  expect_identical(checks(", omega = NA"), character())
+})
+
+test_that("a call's helpers for the lag read a literal params and a thetaMat on an estimated theta", {
+  expect_false(.lintParamsTouch(quote(c(a = 1)), c("b")))
+  expect_true(.lintParamsTouch(quote(c(a = 1)), c("a")))
+  expect_true(.lintParamsTouch(quote(c(1, 2)), c("a")))
+  expect_true(.lintParamsTouch(quote(prm), c("a")))
+  expect_true(.lintParamsTouch(quote(c(a = 1, 2)), c("b")))
+  call <- function(code) parse(text = code, keep.source = FALSE)[[1L]]
+  spec <- list(cmts = list(list(lagnames = c("tlag", "ltlag"), lagcov = "OCC")), est = list(ltlag = 0))
+  expect_true(.lintSiteLagKnown(call("rxSolve(mod, ev)"), quote(mod), spec))
+  expect_false(.lintSiteLagKnown(call("rxSolve(mod, ev, thetaMat = m)"), quote(mod), spec))
+  expect_false(.lintSiteLagKnown(call("rxSolve(mod, ev, iCov = ic)"), quote(mod), spec))
+  expect_true(.lintSiteLagKnown(call("rxSolve(mod, ev, iCov = ic)"), quote(mod), list(cmts = list(list(lagnames = "x", lagcov = character())), est = list())))
+  expect_identical(.lintExtraPositional(call("rxSolve(mod, ev)"), quote(mod)), 0L)
+  expect_identical(.lintExtraPositional(call("rxSolve(mod, ev, p)"), quote(mod)), 1L)
+  expect_identical(.lintExtraPositional(call("rxSolve(mod, events = ev)"), quote(mod)), 0L)
+  expect_identical(.lintExtraPositional(call("rxSolve(mod, p, events = ev)"), quote(mod)), 1L)
+})
+
+test_that("a model that cannot be read or analysed is a finding, not a silent skip", {
+  scan <- .lintScanSolves(.lintRchunks(write_article(c(from_db, "sim <- rxode2::rxSolve(mod, ev)"))), character())
+  got <- .lintPairing(scan, list(list(label = "`Some_Model`", ui = NULL, error = "no such model")))
+  expect_identical(vapply(got, function(i) i$check, ""), "lagged-dose-pairing-unverifiable")
+  expect_match(got[[1L]]$message, "the model `Some_Model` could not be read (no such model)", fixed = TRUE)
+  got <- .lintPairing(scan, list(list(label = "`Some_Model`", ui = list(), error = NULL)))
+  expect_match(got[[1L]]$message, "the model `Some_Model` could not be analysed (the model has no readable statements)", fixed = TRUE)
+  # with no simulation there is nothing to report
+  scan0 <- .lintScanSolves(.lintRchunks(write_article("x <- 1")), character())
+  expect_length(.lintPairing(scan0, list(list(label = "`A`", ui = NULL, error = "boom"))), 0L)
+})
+
+test_that("an rxode2 option set in the article, or an object passed by position, makes the setting unreadable", {
+  skip_if_not_installed("rxode2")
+  code <- c(from_db, ideal_table, "sim <- rxode2::rxSolve(mod, ev)")
+  # a modelled-rate infusion is clean under FALSE, flagged under TRUE
+  expect_identical(pair_checks(pair_lint(code)), character())
+  res <- pair_lint(c("options(rxode2.addlKeepsCov = TRUE)", code))
+  expect_identical(pair_checks(res), "lagged-dose-pairing")
+  expect_match(res$issues$message[res$issues$check == "lagged-dose-pairing"],
+               "The call's setting could not be read, so all three were checked.", fixed = TRUE)
+  expect_identical(pair_checks(pair_lint(c("options(other.option = TRUE)", code))), character())
+  res <- pair_lint(c(from_db, ideal_table, "sim <- rxode2::rxSolve(mod, ev, ctl)"))
+  expect_identical(pair_checks(res), "lagged-dose-pairing")
+  expect_true(.lintSetsRxodeOptions(list(quote(options(rxode2.nonmem = TRUE)))))
+  expect_true(.lintSetsRxodeOptions(list(quote(base::options(rxode2.x = 1)))))
+  expect_false(.lintSetsRxodeOptions(list(quote(options(digits = 3)), quote(x <- 1))))
+})
+
+test_that("two dose records at each dose time, into different compartments, are not a mismatch", {
+  skip_if_not_installed("rxode2")
+  # the library idiom: an infusion (rate = -1) into the lagged compartment and a bolus into another
+  # at every dose time, both carrying the dose's own covariates; the record before each dose carries
+  # the previous dose's
+  code <- c(from_db,
+            "ev <- data.frame(id = 1, time = c(0, 0, 12, 24, 24, 30), evid = c(1, 1, 0, 1, 1, 0), amt = c(100, 100, NA, 100, 100, NA),",
+            '                 cmt = c("depot", "central", "central", "depot", "central", "central"), rate = c(-1, 0, NA, -1, 0, NA),',
+            "                 OCC = c(1, 1, 1, 2, 2, 2))",
+            "sim <- rxode2::rxSolve(mod, ev, addDosing = FALSE)")
+  expect_identical(pair_checks(pair_lint(code, model = make_pair_model(lag = "0.5"))), character())
+  # the second record into the SAME compartment leaves the record before the dose a candidate
+  same <- sub('"depot", "central", "central", "depot", "central", "central"', '"depot", "depot", "central", "depot", "depot", "central"', code, fixed = TRUE)
+  same <- sub("rate = c(-1, 0, NA, -1, 0, NA)", "rate = c(-1, -1, NA, -1, -1, NA)", same, fixed = TRUE)
+  res <- pair_lint(same, model = make_pair_model(lag = "0.5"))
+  expect_identical(pair_checks(res), "lagged-dose-pairing")
+  expect_match(res$issues$message[res$issues$check == "lagged-dose-pairing"],
+               "the dose at time 24 (ID 1) has OCC = 2, but its f() may read OCC = 1 from the observation or other record at time 12", fixed = TRUE)
+})
+
 # --- pieces of the targets -----------------------------------------------------------------------
 
 test_that("a call's arguments are bound to a function's parameters by name, position and default", {
@@ -893,7 +1054,7 @@ test_that("a loop's variable takes its first value and a block's earlier stateme
 # quantity measured is a function of V alone, so a result names the record that
 # supplied it. The designated dose goes to `depot`, every other dose to `depot2`
 # (same f, lag, rate and dur); the table ends with a measuring record V = 99 that
-# supplies nothing.
+# supplies nothing of its own.
 oracle_models <- function() {
   both <- function(rest) rxode2::rxode2(paste(c(
     "alag(depot) <- LAG", "alag(depot2) <- LAG", rest), collapse = "\n"))
@@ -908,120 +1069,173 @@ oracle_models <- function() {
                   "d/dt(central2) <- 0")))
 }
 
-# One random table: observations around a dose at time 20, in random order at
-# equal times. Returns list(ev = <data frame>, target = <row of the designated dose>).
-oracle_table <- function(lag, type, amt = 100, doses = FALSE) {
+# One random table: records around a dose at time 20, in random order at equal
+# times, and sometimes a record at time 0. The other records are observations,
+# or with `doses` also doses into another compartment at the target's time or
+# after it (a dose before the target puts an infusion in flight, and the quantity
+# measured on one compartment no longer names a single record). `decoy` adds a
+# second subject whose records have V + 100 at the same times, in the opposite
+# order at equal times; `scramble` writes the groups of equal times in a random
+# order (the rows of one time keep their order), as an unsorted table.
+# Returns list(ev, target, is_dose, amt, decoy) with the target's row in `ev`.
+oracle_table <- function(lag, type, amt = 100, doses = FALSE, decoy = FALSE, scramble = FALSE) {
   t0 <- 20
-  pool <- c(t0 - 10, t0 - 5, t0 - 1, t0, t0, t0 + lag / 2, t0 + lag, t0 + lag + 0.25, t0 + 3)
+  pool <- c(0, t0 - 10, t0 - 5, t0 - 1, t0 - 1, t0, t0, t0 + lag / 2, t0 + lag, t0 + lag + 0.25, t0 + 3)
   n <- sample(1:5, 1L)
   time <- c(t0, sample(pool, n, replace = TRUE))
-  # the other records are observations, or with `doses` also doses into another
-  # compartment at the target's time or after it: a dose before the target puts
-  # an infusion in flight and the quantity measured on one compartment no longer
-  # names a single record
   is_dose <- c(TRUE, if (doses) runif(n) < 0.4 & time[-1L] >= t0 else rep(FALSE, n))
   ord <- order(time, runif(length(time)))
+  if (scramble) {
+    key <- stats::setNames(runif(length(unique(time))), unique(time))
+    ord <- order(key[as.character(time[ord])], seq_along(ord))
+    ord <- order(time, runif(length(time)))[ord]
+  }
   time <- time[ord]
   is_dose <- is_dose[ord]
   target <- which(ord == 1L)
   k <- length(time)
-  ev <- data.frame(id = 1, time = time, evid = ifelse(is_dose, 1L, 0L),
-                   amt = ifelse(is_dose, amt, NA_real_),
-                   cmt = ifelse(is_dose, ifelse(seq_len(k) == target, "depot", "depot2"), "central"),
-                   V = seq_len(k))
-  if (identical(type, "dur")) ev$dur <- ifelse(is_dose, 2, NA_real_)
-  else ev$rate <- ifelse(is_dose, type, NA_real_)
-  list(ev = ev, target = target, is_dose = is_dose, amt = amt)
+  one <- function(id, v, tm, dz) {
+    ev <- data.frame(id = id, time = tm, evid = ifelse(dz, 1L, 0L), amt = ifelse(dz, amt, NA_real_),
+                     cmt = ifelse(dz, ifelse(seq_along(tm) == target & id == 1, "depot", "depot2"), "central"),
+                     V = v)
+    if (identical(type, "dur")) ev$dur <- ifelse(dz, 2, NA_real_)
+    else ev$rate <- ifelse(dz, type, NA_real_)
+    ev
+  }
+  ev <- one(1, seq_len(k), time, is_dose)
+  if (decoy) {
+    rev_ord <- order(time, -seq_len(k))
+    ev <- rbind(ev, one(2, 100 + seq_len(k), time[rev_ord], is_dose[rev_ord]))
+  }
+  list(ev = ev, target = target, is_dose = is_dose, amt = amt, decoy = decoy, n = k)
 }
 
-# The records the solver saw: the table and the measuring record appended to it,
-# as record times and which of them are doses. The measuring record (V = 99) is
-# the last record of the table, so a read of "a later record" can land on it.
+# The records the solver saw for subject 1: the table and the measuring record
+# appended to it, as record times and which of them are doses. The measuring
+# record (V = 99) is the last record, so a read of "a later record" can land on it.
 oracle_seen <- function(tbl, lag, what) {
-  t_meas <- if (identical(what, "f")) max(tbl$ev$time) + 50 else max(tbl$ev$time, tbl$ev$time[[tbl$target]] + lag) + 1
-  list(time = c(tbl$ev$time, t_meas), dose = c(tbl$is_dose, FALSE))
+  one <- tbl$ev[tbl$ev$id == 1, ]
+  t_meas <- if (identical(what, "f")) max(one$time) + 50 else max(one$time, one$time[[tbl$target]] + lag) + 1
+  list(time = c(one$time, t_meas), dose = c(one$evid == 1L, FALSE), V = c(one$V, 99))
 }
-
-# The record number a supplier V names: V is the record's index, 99 the measuring record.
-oracle_record <- function(v, tbl) if (v == 99) length(tbl$ev$time) + 1L else as.integer(v)
 
 # Which record (its V) supplied f() or rate() of the designated dose.
 oracle_supplier <- function(models, tbl, lag, what, setting) {
-  ev <- tbl$ev
-  tm <- max(ev$time, ev$time[[tbl$target]] + lag) + 1
-  meas <- ev[1L, ]
+  one <- tbl$ev[tbl$ev$id == 1, ]
+  t0 <- one$time[[tbl$target]]
+  tm <- if (identical(what, "f")) max(one$time) + 50 else max(one$time, t0 + lag) + 1
+  meas <- tbl$ev[1L, ]
   meas[1L, ] <- NA
-  meas$id <- 1; meas$time <- if (identical(what, "f")) max(ev$time) + 50 else tm
+  meas$id <- 1; meas$time <- tm
   meas$evid <- 0L; meas$cmt <- "central"; meas$V <- 99
-  ev <- rbind(ev, meas)
+  ev <- rbind(one, meas)
+  if (tbl$decoy) {
+    other <- tbl$ev[tbl$ev$id == 2, ]
+    m2 <- meas
+    m2$id <- 2
+    m2$V <- 199
+    ev <- rbind(ev, other, m2)
+  }
   args <- switch(setting, `FALSE` = list(addlKeepsCov = FALSE), `TRUE` = list(addlKeepsCov = TRUE),
                  nonmem = list(nonmem = TRUE))
   r <- do.call(rxode2::rxSolve, c(list(models[[what]], c(LAG = lag), ev, addDosing = FALSE,
                                        returnType = "data.frame"), args))
+  if (!is.null(r$id)) r <- r[r$id == 1, ]
   if (identical(what, "f")) {
-    round(r$central[r$time == meas$time][[1L]] / tbl$amt * 1000)
+    round(r$central[r$time == tm][[1L]] / tbl$amt * 1000)
   } else {
-    depot <- r$depot[r$time == meas$time][[1L]]
+    depot <- r$depot[r$time == tm][[1L]]
     # the measuring record's rate (99) has emptied the dose by the time it is read
-    if (isTRUE(all.equal(depot, 100))) 99 else round(depot / (tm - (ev$time[[tbl$target]] + lag)))
+    if (isTRUE(all.equal(depot, 100))) 99 else round(depot / (tm - (t0 + lag)))
   }
+}
+
+oracle_type_of <- function(type) {
+  if (identical(type, "dur")) "dur" else if (type == 0) "bolus" else if (type > 0) "fixed" else "modelled"
+}
+
+# One differential check: the record the solver read must be the dose's own or a
+# candidate of the rule (compared by V, so the order the rows were written in
+# does not matter). For a fixed rate under TRUE / nonmem = TRUE, where every other
+# record is a candidate, it must also be one of the records the measured layouts
+# allow: the record at time 0, a record at the dose's time, one between the dose
+# and the end of its infusion (arrival plus amt / 50), or its own; never a record
+# before the dose other than the one at time 0.
+oracle_check <- function(models, tbl, lag, type, what, st, info) {
+  got <- oracle_supplier(models, tbl, lag, what, st)
+  seen <- oracle_seen(tbl, lag, what)
+  one <- tbl$ev[tbl$ev$id == 1, ]
+  pos <- tbl$target
+  cand <- .lintPairCandidates(seen$time, pos, lag, what, oracle_type_of(type), st, seen$dose)
+  ok <- got %in% c(one$V[[pos]], seen$V[cand])
+  testthat::expect_true(ok, info = paste(info, "supplier", got))
+  if (identical(type, 50) && st != "FALSE" && identical(what, "f")) {
+    t0 <- one$time[[pos]]
+    allowed <- c(one$V[[pos]], seen$V[seen$time == 0], seen$V[seen$time == t0],
+                 seen$V[seen$time > t0 & seen$time <= t0 + lag + tbl$amt / 50 + 0.5])
+    testthat::expect_true(got %in% allowed, info = paste(info, "(measured fixed-rate TRUE layouts) supplier", got))
+  }
+  invisible(ok)
+}
+
+oracle_run <- function(models, seed, n, doses, decoy = FALSE, scramble = FALSE) {
+  set.seed(seed)
+  checked <- 0L
+  for (rep in seq_len(n)) {
+    type <- sample(list(0, 50, -1, -2, "dur"), 1L)[[1L]]
+    lag <- sample(c(0.25, 0.5, 1, 2), 1L)
+    # the amount changes how far a fixed-rate infusion reaches; rate() / dur() are
+    # measured with 100 units
+    amt <- if (is.numeric(type) && type < 0) 100 else sample(c(50, 100, 101, 150, 200), 1L)
+    tbl <- oracle_table(lag, type, amt, doses = doses, decoy = decoy, scramble = scramble)
+    for (st in c("FALSE", "TRUE", "nonmem")) {
+      for (what in if (is.numeric(type) && type < 0) c("f", "rate") else "f") {
+        info <- sprintf("type %s amt %s lag %s %s %s: times %s target %d", type, amt, lag, what, st,
+                        paste(tbl$ev$time[tbl$ev$id == 1], collapse = " "), tbl$target)
+        oracle_check(models, tbl, lag, type, what, st, info)
+        checked <- checked + 1L
+      }
+    }
+  }
+  checked
 }
 
 test_that("the record rxode2 reads is always one the rule treats as a candidate or the dose's own", {
   skip_on_cran()
   skip_if_not_installed("rxode2")
-  models <- oracle_models()
-  set.seed(20260713)
-  settings <- c("FALSE", "TRUE", "nonmem")
-  type_of <- function(type) if (identical(type, "dur")) "dur" else if (type == 0) "bolus" else if (type > 0) "fixed" else "modelled"
-  checked <- 0L
-  for (rep in 1:40) {
-    type <- sample(list(0, 50, -1, -2, "dur"), 1L)[[1L]]
-    lag <- sample(c(0.5, 1), 1L)
-    tbl <- oracle_table(lag, type)
-    for (st in settings) {
-      for (what in if (is.numeric(type) && type < 0) c("f", "rate") else "f") {
-        got <- oracle_supplier(models, tbl, lag, what, st)
-        seen <- oracle_seen(tbl, lag, what)
-        cand <- .lintPairCandidates(seen$time, tbl$target, lag, what, type_of(type), st, seen$dose)
-        info <- sprintf("type %s lag %s %s %s: times %s, target %d, supplier %s", type, lag, what, st,
-                        paste(tbl$ev$time, collapse = " "), tbl$target, got)
-        expect_true(oracle_record(got, tbl) %in% c(tbl$target, cand), info = info)
-        checked <- checked + 1L
-      }
-    }
-  }
-  expect_gt(checked, 100L)
+  expect_gt(oracle_run(oracle_models(), 20260713, 40, doses = FALSE), 100L)
 })
 
 test_that("doses into another compartment at or after the dose, and other amounts, stay candidates", {
   skip_on_cran()
   skip_if_not_installed("rxode2")
+  expect_gt(oracle_run(oracle_models(), 20260714, 40, doses = TRUE), 100L)
+})
+
+test_that("a second subject's records and an unsorted table do not change what the first subject reads", {
+  skip_on_cran()
+  skip_if_not_installed("rxode2")
   models <- oracle_models()
-  set.seed(20260714)
-  settings <- c("FALSE", "TRUE", "nonmem")
-  type_of <- function(type) if (identical(type, "dur")) "dur" else if (type == 0) "bolus" else if (type > 0) "fixed" else "modelled"
-  checked <- 0L
-  for (rep in 1:40) {
-    type <- sample(list(0, 50, -1, -2, "dur"), 1L)[[1L]]
-    lag <- sample(c(0.5, 1), 1L)
-    # the amount sets how long a fixed-rate infusion runs, which changes how far
-    # after the arrival a record can be read
-    amt <- if (identical(type, 50)) sample(c(100, 101, 200), 1L) else 100
-    tbl <- oracle_table(lag, type, amt, doses = TRUE)
-    for (st in settings) {
-      for (what in if (is.numeric(type) && type < 0) c("f", "rate") else "f") {
-        got <- oracle_supplier(models, tbl, lag, what, st)
-        seen <- oracle_seen(tbl, lag, what)
-        cand <- .lintPairCandidates(seen$time, tbl$target, lag, what, type_of(type), st, seen$dose)
-        info <- sprintf("type %s amt %s lag %s %s %s: times %s kinds %s, target %d, supplier %s", type, amt, lag, what, st,
-                        paste(tbl$ev$time, collapse = " "), paste(ifelse(tbl$is_dose, "D", "o"), collapse = ""), tbl$target, got)
-        expect_true(oracle_record(got, tbl) %in% c(tbl$target, cand), info = info)
-        checked <- checked + 1L
-      }
-    }
+  expect_gt(oracle_run(models, 20260715, 25, doses = FALSE, decoy = TRUE), 60L)
+  expect_gt(oracle_run(models, 20260716, 25, doses = FALSE, decoy = TRUE, scramble = TRUE), 60L)
+})
+
+test_that("with several records at the time before the dose, a modelled rate reads one of them", {
+  skip_on_cran()
+  skip_if_not_installed("rxode2")
+  models <- oracle_models()
+  for (rate in c(-1, -2)) for (st in c("TRUE", "nonmem")) {
+    # three observations at 19 (V 1, 2, 3), one at 5, then the dose at 20 (V 4)
+    ev <- data.frame(id = 1, time = c(5, 19, 19, 19, 20), evid = c(0, 0, 0, 0, 1), amt = c(NA, NA, NA, NA, 100),
+                     cmt = c("central", "central", "central", "central", "depot"), rate = c(NA, NA, NA, NA, rate),
+                     V = c(5, 1, 2, 3, 4))
+    tbl <- list(ev = ev, target = 5L, is_dose = ev$evid == 1L, amt = 100, decoy = FALSE, n = 5L)
+    got <- oracle_supplier(models, tbl, 0.5, "f", st)
+    seen <- oracle_seen(tbl, 0.5, "f")
+    cand <- .lintPairCandidates(seen$time, 5L, 0.5, "f", "modelled", st, seen$dose)
+    expect_true(got %in% c(1, 2, 3), info = paste(rate, st, got))
+    expect_setequal(seen$V[cand], c(1, 2, 3))
   }
-  expect_gt(checked, 100L)
 })
 
 test_that("the rule's known-answer cells agree with rxode2 for the measured layouts", {
@@ -1037,7 +1251,7 @@ test_that("the rule's known-answer cells agree with rxode2 for the measured layo
     k <- length(time)
     list(ev = data.frame(id = 1, time = time, evid = ifelse(is_dose, 1L, 0L), amt = ifelse(is_dose, 100, NA_real_),
                          cmt = ifelse(is_dose, "depot", "central"), rate = ifelse(is_dose, 0, NA_real_), V = seq_len(k)),
-         target = which(is_dose), is_dose = is_dose, amt = 100)
+         target = which(is_dose), is_dose = is_dose, amt = 100, decoy = FALSE, n = k)
   }
   # bolus, f(): FALSE reads the record at the dose's time (either order) and one in the window
   for (case in list(list(24, TRUE), list(24, FALSE), list(24.25, FALSE))) {

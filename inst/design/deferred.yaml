@@ -28,8 +28,12 @@
     records) and the randomised differential test against rxode2 is restricted
     to doses at or after the dose, because an earlier infusion in flight into
     another compartment made the quantity measured on one compartment name no
-    single record. Needs an oracle that separates the doses, and same-compartment
-    next doses (the lag longer than the interval).
+    single record. A lagged dose into another compartment supplies rate() / dur()
+    only if it is recorded no earlier and arrives no later than the dose, or is
+    recorded earlier and arrives later (measured with the lagged-dose session);
+    the rule makes an earlier dose still in its lag a candidate. Needs an oracle
+    that separates the doses, and same-compartment next doses (the lag longer than
+    the interval).
   pointer: >-
     header of R/lint-pairing.R and .lintPairCandidates(); the differential tests
     in tests/testthat/test-lint-pairing.R; pinned by the "a dose next to the

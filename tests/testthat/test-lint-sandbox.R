@@ -279,3 +279,138 @@ test_that("the CLI script parses and names the pairing flag", {
   expect_no_error(parse(file = script))
   expect_match(paste(readLines(script), collapse = "\n"), "--no-pairing", fixed = TRUE)
 })
+
+# --- functions that evaluate a string their caller passes ----------------------------------------
+
+test_that("the functions that evaluate a glue template or a function name outside the sandbox are not listed", {
+  skip_if_not_installed("dplyr")
+  wl <- .lintSandboxEnv()
+  for (pkg in names(.lintSandboxExcluded)) {
+    for (nm in .lintSandboxExcluded[[pkg]]) {
+      expect_false(nm %in% .lintSandboxPackages[[pkg]], info = nm)
+      expect_false(exists(nm, envir = wl), info = nm)
+      call <- bquote(.lintSandboxColon(.(as.name(pkg)), .(as.name(nm))))
+      expect_error(eval(call), "is not allowed", info = nm)
+      res <- sandbox(character(), sprintf("%s::%s", pkg, nm))
+      expect_false(res$ok, info = nm)
+    }
+  }
+})
+
+# Data whose column names and values are file names, so that applying
+# file.create() to either leaves files in the working directory; glue templates
+# that run code leave a file too.
+escape_cases <- c(
+  # glue templates
+  pivot_wider_glue = 'tidyr::pivot_wider(data.frame(i = 1, k = "a", v = 1), names_from = k, values_from = v, names_glue = "{file.create(\'glue_canary\')}")',
+  pivot_wider_glue_shell = 'tidyr::pivot_wider(data.frame(i = 1, k = "a", v = 1), names_from = k, values_from = v, names_glue = "{system(\'touch glue_shell_canary\')}")',
+  pivot_wider_glue_abbrev = 'tidyr::pivot_wider(data.frame(i = 1, k = "a", v = 1), names_from = k, values_from = v, names_gl = "{file.create(\'glue_canary\')}")',
+  across_names_glue = 'dplyr::mutate(data.frame(a = 1), dplyr::across(a, identity, .names = "{file.create(\'glue_canary\')}"))',
+  unnest_wider_names_sep = 'tidyr::unnest_wider(tibble::tibble(a = list(list(b = 1))), a, names_sep = "{file.create(\'glue_canary\')}")',
+  unite_sep = 'tidyr::unite(data.frame(a = 1, b = 2), "ab", a, b, sep = "{file.create(\'glue_canary\')}")',
+  sprintf_braces = 'sprintf("{file.create(\'glue_canary\')}", 1)',
+  # function names as strings
+  pivot_longer_names_transform = 'tidyr::pivot_longer(data.frame(canary_a = 1, canary_b = 2), c(canary_a, canary_b), names_transform = list(name = "file.create"))',
+  pivot_longer_values_transform = 'tidyr::pivot_longer(data.frame(a = "canary_a", b = "canary_b"), c(a, b), values_transform = list(value = "file.create"))',
+  pivot_wider_values_fn = 'tidyr::pivot_wider(data.frame(i = 1, k = "a", v = "canary_a"), names_from = k, values_from = v, values_fn = "file.create")',
+  rename_with_string = 'dplyr::rename_with(data.frame(canary_a = 1, canary_b = 2), "file.create")',
+  list_flatten_is_node = 'purrr::list_flatten(list(a = list("canary_a")), is_node = "file.create")',
+  across_string = 'dplyr::mutate(data.frame(a = "canary_a"), dplyr::across(a, "file.create"))',
+  summarise_across_string = 'dplyr::summarise(data.frame(a = "canary_a"), dplyr::across(a, "file.create"))',
+  mutate_at_string = 'dplyr::mutate_at(data.frame(a = "canary_a"), "a", "file.create")',
+  mutate_all_string = 'dplyr::mutate_all(data.frame(a = "canary_a"), "file.create")',
+  mutate_if_string = 'dplyr::mutate_if(data.frame(a = "canary_a"), is.character, "file.create")',
+  summarise_at_string = 'dplyr::summarise_at(data.frame(a = "canary_a"), "a", "file.create")',
+  map_string = 'purrr::map("canary_a", "file.create")',
+  map_chr_string = 'purrr::map_chr("canary_a", "file.create")',
+  pmap_string = 'purrr::pmap(list("canary_a"), "file.create")',
+  reduce_string = 'purrr::reduce(c("canary_a", "x"), "file.create")',
+  keep_string = 'purrr::keep("canary_a", "file.create")',
+  modify_string = 'purrr::modify("canary_a", "file.create")',
+  map_if_string = 'purrr::map_if("canary_a", is.character, "file.create")',
+  negate_string = 'purrr::negate("file.create")("canary_a")',
+  partial_string = 'purrr::partial("file.create")("canary_a")',
+  as_mapper_string = 'purrr::as_mapper("file.create")("canary_a")',
+  imap_string = 'purrr::imap("canary_a", "file.create")',
+  detect_string = 'purrr::detect("canary_a", "file.create")',
+  accumulate_string = 'purrr::accumulate(c("canary_a", "x"), "file.create")',
+  aggregate_string = 'stats::aggregate(a ~ g, data.frame(a = "canary_a", g = 1), "file.create")',
+  tapply_string = 'tapply("canary_a", 1, "file.create")',
+  ave_string = 'stats::ave(1, 1, FUN = "file.create")',
+  apply_string = 'apply(matrix("canary_a"), 1, "file.create")',
+  outer_string = 'outer("canary_a", "x", "file.create")',
+  sapply_string = 'sapply("canary_a", "file.create")',
+  mapply_string = 'mapply("file.create", "canary_a")',
+  vapply_string = 'vapply("canary_a", "file.create", TRUE)',
+  Reduce_string = 'Reduce("file.create", list("canary_a", "x"))',
+  Filter_string = 'Filter("file.create", "canary_a")',
+  Position_string = 'Position("file.create", "canary_a")',
+  Find_string = 'Find("file.create", "canary_a")',
+  Map_string = 'Map("file.create", "canary_a")',
+  Vectorize_string = 'Vectorize("file.create")("canary_a")',
+  do_call_string = 'do.call("file.create", list("canary_a"))',
+  match_fun_string = 'sapply("canary_a", match.fun("file.create"))',
+  tibble_name_repair = 'tibble::tibble(canary_a = 1, canary_a = 2, .name_repair = "file.create")',
+  expand_grid_repair = 'tidyr::expand_grid(canary_a = 1, .name_repair = "file.create")',
+  as_tibble_repair = 'tibble::as_tibble(data.frame(canary_a = 1), .name_repair = "file.create")',
+  # code evaluated by data masks and quosures runs in the sandbox's environment
+  mutate_expr = 'dplyr::mutate(data.frame(a = 1), b = file.create("canary_a"))',
+  filter_expr = 'dplyr::filter(data.frame(a = 1), file.create("canary_a"))',
+  do_expr = 'dplyr::do(data.frame(a = 1), data.frame(b = file.create("canary_a")))',
+  with_expr = 'with(data.frame(a = 1), file.create("canary_a"))',
+  within_expr = 'within(data.frame(a = 1), b <- file.create("canary_a"))',
+  subset_expr = 'subset(data.frame(a = 1), file.create("canary_a"))',
+  transform_expr = 'transform(data.frame(a = 1), b = file.create("canary_a"))',
+  case_when_expr = 'dplyr::case_when(TRUE ~ file.create("canary_a"))',
+  mutate_bang = 'dplyr::mutate(data.frame(a = 1), b = !!quote(file.create("canary_a")))',
+  tibble_expr = 'tibble::tibble(a = file.create("canary_a"))',
+  lambda_in_map = 'purrr::map(1, function(x) file.create("canary_a"))',
+  formula_in_map = 'purrr::map(1, ~ file.create("canary_a"))'
+)
+
+test_that("no function that evaluates a string or an expression leaves a trace outside the sandbox", {
+  skip_if_not_installed("dplyr")
+  skip_if_not_installed("tidyr")
+  skip_if_not_installed("tibble")
+  skip_if_not_installed("purrr")
+  work <- withr::local_tempdir()
+  withr::local_dir(work)
+  traces <- function() list.files(work, all.files = TRUE, no.. = TRUE)
+  for (nm in names(escape_cases)) {
+    unlink(traces(), recursive = TRUE)
+    # through the whole path: the static check and the run
+    suppressWarnings(sandbox(character(), escape_cases[[nm]]))
+    expect_identical(traces(), character(), info = paste(nm, "(sandbox run)"))
+    # and in the environment alone, without the static check
+    env <- new.env(parent = .lintSandboxEnv())
+    suppressWarnings(tryCatch(eval(parse1(escape_cases[[nm]]), env), error = function(e) NULL))
+    expect_identical(traces(), character(), info = paste(nm, "(environment alone)"))
+  }
+  expect_gte(length(escape_cases), 60L)
+})
+
+test_that("the audit of the listed functions' function-and-template parameters finds no trace", {
+  skip_on_cran()
+  skip_if_not_installed("dplyr")
+  skip_if_not_installed("tidyr")
+  skip_if_not_installed("tibble")
+  skip_if_not_installed("purrr")
+  # the parameters that can take a function name, a function or a template; the
+  # unrestricted audit (.lintSandboxAudit()) takes about half an hour
+  pattern <- "fn|FUN|fun$|^f$|transform|glue|names|repair|is_node|^\\.?p$|^what$|filter|sep|key"
+  expect_identical(.lintSandboxAudit(pattern, quick = TRUE), character())
+})
+
+test_that("the audit reports a function that resolves a name outside the sandbox", {
+  skip_on_cran()
+  # a function defined in base's environment hands FUN to lapply() from its own frame,
+  # as stats::ave() does, so a string resolves along base's chain
+  leaky <- function(x, FUN) lapply(x, FUN)
+  environment(leaky) <- baseenv()
+  found <- .lintSandboxAudit("FUN", extra = list(leaky = leaky), quick = TRUE)
+  expect_true("extra::leaky(FUN = <fn_string>)" %in% found)
+  # and a function that looks the name up in the caller is not reported
+  safe <- function(x, FUN) lapply(x, match.fun(FUN))
+  environment(safe) <- baseenv()
+  expect_identical(.lintSandboxAudit("FUN", extra = list(safe = safe), quick = TRUE), character())
+})

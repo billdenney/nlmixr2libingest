@@ -29,14 +29,18 @@ Imports:
     tools,
     utils
 Suggests:
+    dplyr,
     httr2,
     knitr,
     nlmixr2lib,
     pkgload,
+    purrr,
     rcmdcheck,
     rmarkdown,
     rxode2,
     testthat (>= 3.1.7),
+    tibble,
+    tidyr,
     withr,
     yaml
 Config/testthat/edition: 3

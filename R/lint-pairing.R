@@ -41,44 +41,61 @@
 
 # The rows (other than `i`) of one subject's records that dose `i` may read.
 # `time` is the subject's record times in data order; `lag` is the lag time (NA
-# when it could not be computed, in which case only a record at the dose's time
-# is checked); `qty` is "f" or "rate"; `type` is "bolus", "dur", "fixed" or
+# when it could not be computed, in which case the window is every record up to
+# `horizon`, the next dose); `qty` is "f" or "rate"; `type` is "bolus", "dur", "fixed" or
 # "modelled"; `setting` is "FALSE", "TRUE" or "nonmem"; `dose` says which records
-# are doses (default: none, so every other record is an observation).
+# are doses (default: none, so every other record is an observation) and `same`
+# which of them go into the dose's own compartment (default: every dose).
 #
 # The cells follow the measurements in the header of this file. The behaviour
 # next to another dose was only measured for a bolus's f() and for a dose into
 # another compartment, so the rule is wider there: a dose at the dose's time or
 # inside the lag window is a candidate for every quantity, a dose at the dose's
-# time also makes the record before the dose a candidate for an infusion's f(),
-# and makes every later record a candidate for rate() / dur().
+# time also makes the record before the dose a candidate for an infusion's f() if
+# it goes into the dose's own compartment, and makes the next record after it a
+# candidate for rate() / dur().
 .lintPairCandidates <- function(time, i, lag, qty, type, setting,
-                                dose = rep(FALSE, length(time))) {
+                                dose = rep(FALSE, length(time)), horizon = Inf,
+                                same = dose) {
   if (!is.na(lag) && lag <= 0) return(integer())
   others <- setdiff(seq_along(time), i)
   t <- time[[i]]
   at <- others[time[others] == t]
   known <- !is.na(lag)
-  closed <- if (known) others[time[others] > t & time[others] <= t + lag] else integer()
-  open <- if (known) others[time[others] > t & time[others] < t + lag] else integer()
+  # the window ends at the arrival time; when the lag is not known it ends at the
+  # next dose (`horizon`), so every record a lag shorter than the dosing interval
+  # could reach is a candidate
+  end <- if (known) t + lag else horizon
+  # a record at the arrival time counts for a bolus's f(); the next dose's own
+  # record, where the window ends, does not
+  closed <- if (known) others[time[others] > t & time[others] <= end]
+            else others[time[others] > t & time[others] < end]
+  open <- others[time[others] > t & time[others] < end]
+  # a dose recorded earlier that is still in its lag when this dose is recorded
+  # arrives after it, and can supply it
+  early <- if (known) others[dose[others] & time[others] < t & time[others] + lag > t] else integer()
   before <- others[time[others] < t]
   prev <- if (length(before)) before[time[before] == max(time[before])] else integer()
   if (identical(qty, "f")) {
-    return(switch(
+    return(unique(switch(
       type,
-      bolus = , dur = if (identical(setting, "FALSE")) c(at, closed) else integer(),
-      fixed = if (identical(setting, "FALSE")) c(at, if (any(dose[at])) prev) else others,
+      bolus = , dur = if (identical(setting, "FALSE")) c(at, closed, early) else integer(),
+      fixed = if (identical(setting, "FALSE")) c(at, if (any(same[at])) prev, early) else others,
       # a modelled rate reads the record at its time, else the record before it,
       # and the next record inside the window when it is the subject's first; a
-      # dose at its time (into the same compartment) leaves the record before it
-      modelled = if (identical(setting, "FALSE")) c(at, if (any(dose[at])) prev)
-                 else c(at, prev, if (!length(prev)) open),
-      stop("unknown dose type: ", type, call. = FALSE)))
+      # dose at its time into the same compartment leaves the record before it
+      # (one into another compartment supplies like an observation)
+      modelled = if (identical(setting, "FALSE")) c(at, if (any(same[at])) prev, early)
+                 else c(at, prev, if (!length(prev)) open, early),
+      stop("unknown dose type: ", type, call. = FALSE))))
   }
-  cand <- c(at, open)
-  # a dose at the dose's time: rxode2 reads rate() / dur() from a record that
-  # is not in the window (measured with the later record, not the dose)
-  if (any(dose[at])) cand <- c(cand, others[time[others] > t])
+  cand <- c(at, open, early)
+  # a dose at the dose's time (into another compartment): rxode2 reads rate() /
+  # dur() from the next record after it, which is not in the window
+  if (any(dose[at])) {
+    after <- others[time[others] > t]
+    if (length(after)) cand <- c(cand, after[time[after] == min(time[after])])
+  }
   # nonmem = TRUE reads records in data order: one written before the dose is
   # not read
   if (identical(setting, "nonmem")) cand <- cand[!(cand %in% at & cand < i & !dose[cand])]
@@ -172,8 +189,9 @@
   id <- .lintEvCol(ev, "id")
   if (is.null(id)) id <- rep(1L, nrow(ev))
   covs <- intersect(spec$covs_used, names(ev))
+  cmt_chr <- if (is.null(cmt)) rep("1", nrow(ev)) else as.character(cmt)
   rec <- data.frame(.id = id, .time = time, .dose = dose, .type = type, .lc = lc,
-                    stringsAsFactors = FALSE)
+                    .cmt = cmt_chr, stringsAsFactors = FALSE)
   rec$.dose[!dose] <- FALSE
   rec$.lc[!dose] <- NA_integer_
   for (cv in covs) {
@@ -197,23 +215,28 @@
 
 # Doses of an event table whose covariates the setting would read from another
 # record. The lag time of a dose is computed from the model (see .lintLagTime();
-# NA when it cannot be), cached in `cache`. Returns a data frame with one row per
-# (dose, record, covariate) difference.
-.lintPairCheck <- function(rec, spec, setting, cache) {
+# NA when it cannot be), cached in `cache`; `lag_known` FALSE says the call
+# supplies parameters that may change it, so it is NA for every dose. Returns a
+# data frame with one row per (dose, record, covariate) difference.
+.lintPairCheck <- function(rec, spec, setting, cache, lag_known = TRUE) {
   out <- list()
-  covs <- setdiff(names(rec), c(".id", ".time", ".dose", ".type", ".lc"))
+  covs <- setdiff(names(rec), c(".id", ".time", ".dose", ".type", ".lc", ".cmt"))
   for (rows in split(seq_len(nrow(rec)), rec$.id)) {
     time <- rec$.time[rows]
     dose <- rec$.dose[rows]
     lc <- rec$.lc[rows]
     type <- rec$.type[rows]
+    cmtv <- rec$.cmt[rows]
     cvv <- stats::setNames(lapply(covs, function(cv) rec[[cv]][rows]), covs)
     idv <- rec$.id[[rows[[1L]]]]
     for (i in which(dose & !is.na(lc))) {
       ce <- spec$cmts[[lc[[i]]]]
       own_type <- type[[i]]
       vals <- lapply(cvv, function(v) v[[i]])
-      lag <- .lintLagCached(spec, ce, vals, cache)
+      lag <- if (lag_known) .lintLagCached(spec, ce, vals, cache) else NA_real_
+      later <- time[dose & time > time[[i]]]
+      horizon <- if (length(later)) min(later) else Inf
+      same <- dose & cmtv == cmtv[[i]]
       f_type <- switch(own_type, bolus = "bolus", dur = "dur", fixed = "fixed", "modelled")
       qtys <- list(list(q = "f", type = f_type, cov = ce$f))
       if (own_type == "rate1") qtys[[2L]] <- list(q = "rate", type = "modelled", cov = ce$rate)
@@ -221,7 +244,7 @@
       for (qq in qtys) {
         use <- intersect(qq$cov, covs)
         if (!length(use)) next
-        for (j in .lintPairCandidates(time, i, lag, qq$q, qq$type, setting, dose)) for (cv in use) {
+        for (j in .lintPairCandidates(time, i, lag, qq$q, qq$type, setting, dose, horizon, same)) for (cv in use) {
           if (.lintDiffers(cvv[[cv]][[i]], cvv[[cv]][[j]])) {
             out[[length(out) + 1L]] <- list(
               id = idv, time = time[[i]], cmt = ce$cmt, type = own_type, qty = qq$q,
@@ -268,14 +291,18 @@
     hit <- sp[fn == f & (is.na(cm) | cm == cmt)]
     sort(unique(as.character(unlist(lapply(hit, reach)))))
   }
+  ini <- ui$iniDf
+  etas <- as.character(ini$name[is.na(ini$ntheta)])
   cmts <- lapply(unique(cm[fn == "alag" & !is.na(cm)]), function(x) {
     lag_stmts <- sp[fn == "alag" & cm == x]
+    # every name the lag depends on, through intermediate assignments
+    names_in <- unique(as.character(unlist(lapply(lag_stmts, function(st) .lintReachable(st$reads, acc$deps)))))
     list(cmt = x, f = covs_of("f", x), rate = covs_of("rate", x), dur = covs_of("dur", x),
-         lagcov = sort(unique(as.character(unlist(lapply(lag_stmts, reach))))))
+         lagcov = sort(unique(as.character(unlist(lapply(lag_stmts, reach))))),
+         lagnames = names_in, lag_eta = length(intersect(names_in, etas)) > 0L)
   })
   keep <- vapply(cmts, function(ce) length(ce$f) + length(ce$rate) + length(ce$dur) > 0L, NA)
   cmts <- cmts[keep]
-  ini <- ui$iniDf
   is_theta <- !is.na(ini$ntheta)
   est <- stats::setNames(as.list(ini$est[is_theta]), ini$name[is_theta])
   list(cmts = cmts,
@@ -318,10 +345,13 @@
 }
 
 # The lag time of a dose into compartment `ce$cmt`: the model's statements run at
-# the initial estimates with every eta at 0 and the dose record's covariates.
-# NA when it cannot be computed (a statement the sandbox cannot run, a covariate
-# the table does not carry) or is not a finite number of at least 0.
+# the initial estimates and the dose record's covariates. NA when it cannot be
+# computed (a statement the sandbox cannot run, a covariate the table does not
+# carry), is not a finite number of at least 0, or depends on a random effect.
 .lintLagTime <- function(spec, ce, covvals) {
+  # a lag that reads a random effect differs between subjects; the typical value
+  # is not the lag
+  if (isTRUE(ce$lag_eta)) return(NA_real_)
   env <- new.env(parent = spec$env)
   for (nm in names(spec$est)) assign(nm, spec$est[[nm]], envir = env)
   for (nm in spec$etas) assign(nm, 0, envir = env)
@@ -387,16 +417,80 @@
 # (addlKeepsCov = TRUE) or "nonmem" (nonmem = TRUE). A literal setting gives one;
 # a setting the call does not state is FALSE; anything that cannot be read (a
 # variable, tieOrder, a control argument that is not an inline rxControl() /
-# list(), nonmem = TRUE together with addlKeepsCov = FALSE) gives all three.
-.lintSiteSettings <- function(call) {
+# list(), nonmem = TRUE together with addlKeepsCov = FALSE, or `unread`, which
+# says the setting may come from elsewhere) gives all three.
+.lintSiteSettings <- function(call, unread = FALSE) {
   st <- new.env(parent = emptyenv())
   st$keeps <- NULL
   st$nonmem <- FALSE
-  st$unreadable <- FALSE
+  st$unreadable <- unread
   .lintTakeSetting(as.list(call)[-1L], st)
   if (st$unreadable || (st$nonmem && identical(st$keeps, FALSE))) return(c("FALSE", "TRUE", "nonmem"))
   if (st$nonmem) return("nonmem")
   if (isTRUE(st$keeps)) "TRUE" else "FALSE"
+}
+
+# --- what else a call or an article can change -----------------------------------------------
+
+# Whether a `params` / `theta` argument may touch the names a lag depends on: a
+# literal c() / list() whose names are all given and none of them one of
+# `lag_names` does not; anything else (a variable, a data frame, an unnamed
+# element) may.
+.lintParamsTouch <- function(a, lag_names) {
+  if (!is.call(a) || !.lintCallName(a) %in% c("c", "list")) return(TRUE)
+  nms <- names(as.list(a)[-1L])
+  if (is.null(nms) || any(!nzchar(nms))) return(TRUE)
+  length(intersect(nms, lag_names)) > 0L
+}
+
+# How many of a simulation call's unnamed arguments are not the model, a model
+# expression or the event table: a params or control object given by position.
+.lintExtraPositional <- function(call, model_arg) {
+  args <- as.list(call)[-1L]
+  nms <- names(args)
+  if (is.null(nms)) nms <- rep("", length(args))
+  free <- nms == "" & !vapply(args, identical, NA, model_arg) & !vapply(args, .lintIsModelish, NA)
+  max(0L, sum(free) - if ("events" %in% nms) 0L else 1L)
+}
+
+# Whether the lag time computed from the model is the lag the call uses: not when
+# it passes parameters that may change what the lag reads (params, theta,
+# thetaMat, iCov, or an unnamed extra argument).
+.lintSiteLagKnown <- function(call, model_arg, spec) {
+  if (.lintExtraPositional(call, model_arg) > 0L) return(FALSE)
+  lag_names <- unique(unlist(lapply(spec$cmts, function(ce) ce$lagnames)))
+  lag_covs <- unique(unlist(lapply(spec$cmts, function(ce) ce$lagcov)))
+  args <- as.list(call)[-1L]
+  nms <- names(args)
+  if (is.null(nms)) nms <- rep("", length(args))
+  for (i in seq_along(args)) {
+    if (nms[[i]] %in% c("params", "theta") && .lintParamsTouch(args[[i]], lag_names)) return(FALSE)
+    if (identical(nms[[i]], "thetaMat") && length(intersect(lag_names, names(spec$est)))) return(FALSE)
+    if (identical(nms[[i]], "iCov") && length(lag_covs)) return(FALSE)
+  }
+  TRUE
+}
+
+# Whether the article sets an rxode2 option (`options(rxode2.addlKeepsCov = ...)`
+# and the like) anywhere, which would change the default of a simulation that
+# states nothing.
+.lintSetsRxodeOptions <- function(exprs) {
+  for (e in exprs) {
+    acc <- new.env(parent = emptyenv())
+    acc$found <- FALSE
+    .lintFindOptions(e, acc)
+    if (acc$found) return(TRUE)
+  }
+  FALSE
+}
+.lintFindOptions <- function(e, acc) {
+  if (!is.call(e)) return(invisible(NULL))
+  if (identical(.lintCallName(e), "options")) {
+    nms <- names(as.list(e)[-1L])
+    if (any(grepl("^rxode2", nms))) acc$found <- TRUE
+  }
+  for (el in .lintKids(e)) .lintFindOptions(el, acc)
+  invisible(NULL)
 }
 
 # --- the rule ---------------------------------------------------------------------------
@@ -703,8 +797,10 @@
   }
   unread <- length(settings) > 1L
   lagnote <- if (!lag_known) {
-    paste0(" The lag time could not be computed from the model's initial estimates, so only ",
-           "records at a dose's own time were checked, not those inside its lag window.")
+    paste0(" The lag time is not known from the model's initial estimates (it reads a random ",
+           "effect, a parameter the call supplies or a covariate the table does not carry, or ",
+           "could not be computed), so every record up to the dose's next dose was checked, ",
+           "not only those inside its lag window.")
   } else ""
   list(check = "lagged-dose-pairing",
        message = paste0("`", text, "` is given an event table in which ",
@@ -729,23 +825,37 @@
 # and one "lagged-dose-pairing-unverifiable" per reason a simulation could not be
 # checked (naming the first and counting the rest).
 .lintPairing <- function(scan, models) {
+  if (!length(scan$sites)) return(list())
   specs <- list()
+  problems <- character()
   for (m in models) {
-    if (is.null(m$ui)) next
-    sp <- tryCatch(.lintLagSpec(m$ui), error = function(e) NULL)
-    if (!is.null(sp) && length(sp$cmts)) {
+    if (is.null(m$ui)) {
+      problems <- c(problems, paste0("the model ", m$label, " could not be read (",
+                                     .lintTrunc(if (is.null(m$error)) "no reason given" else m$error, 80L), ")"))
+      next
+    }
+    sp <- tryCatch(.lintLagSpec(m$ui), error = function(e) e)
+    if (inherits(sp, "error")) {
+      problems <- c(problems, paste0("the model ", m$label, " could not be analysed (",
+                                     .lintTrunc(conditionMessage(sp), 80L), ")"))
+    } else if (length(sp$cmts)) {
       sp$label <- m$label
       specs[[length(specs) + 1L]] <- sp
     }
   }
-  if (!length(specs) || !length(scan$sites)) return(list())
+  if (!length(specs) && !length(problems)) return(list())
   wl <- .lintSandboxEnv()
   for (i in seq_along(specs)) specs[[i]]$env <- wl
+  opts_unread <- .lintSetsRxodeOptions(scan$exprs)
 
   iss <- list()
   unver <- new.env(parent = emptyenv())
   run <- 0L
   spec_names <- vapply(specs, function(sp) .lintLabelName(sp$label), "")
+  for (problem in problems) {
+    for (site in scan$sites) .lintNoteUnverifiable(unver, problem, site$text)
+  }
+  if (!length(specs)) return(.lintPairingRows(iss, unver))
   for (site in scan$sites) {
     text <- site$text
     # a simulation of another library model is not about a lagged dose here: the
@@ -774,7 +884,9 @@
       next
     }
     spec <- pick$spec
-    settings <- .lintSiteSettings(site$call)
+    settings <- .lintSiteSettings(
+      site$call, unread = opts_unread || .lintExtraPositional(site$call, site$model_arg) > 0L)
+    lag_known <- .lintSiteLagKnown(site$call, site$model_arg, spec)
     diffs <- list()
     n_doses <- 0L
     for (target in tg$targets) {
@@ -794,7 +906,7 @@
         next
       }
       cache <- new.env(parent = emptyenv())
-      d <- do.call(rbind, lapply(settings, function(st) .lintPairCheck(recs$rec, spec, st, cache)))
+      d <- do.call(rbind, lapply(settings, function(st) .lintPairCheck(recs$rec, spec, st, cache, lag_known)))
       n_doses <- n_doses + .lintLaggedDoseCount(recs$rec)
       if (!is.null(d)) diffs[[length(diffs) + 1L]] <- d
     }
@@ -803,6 +915,11 @@
     iss[[length(iss) + 1L]] <- .lintPairingIssue(
       text, diffs, n_doses, settings, !anyNA(diffs$lag))
   }
+  .lintPairingRows(iss, unver)
+}
+
+# The findings as rows: the differences, then one "not verifiable" per reason.
+.lintPairingRows <- function(iss, unver) {
   out <- lapply(iss, function(i) .lintIssue(i$check, "warning", i$message, i$fix))
   for (reason in sort(names(unver))) {
     texts <- unver[[reason]]
