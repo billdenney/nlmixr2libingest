@@ -196,8 +196,10 @@
 #   acc$deps    named list, variable -> the names its right-hand sides read,
 #               over ALL of its assignments, plus the names of every enclosing
 #               if() condition (which decide whether the assignment happens);
-#   acc$special one entry per f() / alag() statement: the function ("f" or
-#               "alag") and the names its right-hand side reads, likewise.
+#   acc$special one entry per f() / alag() / dur() / rate() statement: the
+#               function ("f", "alag", "dur" or "rate"), the names its
+#               right-hand side reads, likewise, the right-hand side itself and
+#               the compartment it is for (NA when not a plain name).
 # `guard` carries the enclosing if() conditions' names down the recursion.
 # lstExpr keeps the source spellings F() and lag(), so they are normalised here.
 .lintCollectAssignments <- function(x, guard, acc) {
@@ -216,9 +218,11 @@
       acc$deps[[nm]] <- union(acc$deps[[nm]], reads)
     } else if (is.call(lhs) && is.symbol(lhs[[1L]]) && length(lhs) == 2L) {
       fn <- switch(as.character(lhs[[1L]]), f = , F = "f", alag = , lag = "alag",
-                   NA_character_)
+                   dur = "dur", rate = "rate", NA_character_)
       if (!is.na(fn)) {
-        acc$special[[length(acc$special) + 1L]] <- list(fn = fn, reads = reads)
+        acc$special[[length(acc$special) + 1L]] <- list(
+          fn = fn, reads = reads, rhs = x[[3L]],
+          cmt = if (is.symbol(lhs[[2L]])) as.character(lhs[[2L]]) else NA_character_)
       }
     }
   }
@@ -364,6 +368,13 @@
 .lintApplyFamily <- c("lapply", "sapply", "vapply", "Map", "mapply", "map",
                       "map2", "pmap", "imap", "walk", "walk2", "pwalk", "iwalk")
 .lintIsApply <- function(nm) nm %in% .lintApplyFamily || grepl("^map_", nm)
+# The calls that run a function over arguments, for binding that function's
+# parameters to their first elements (a wider list than .lintIsApply(), which
+# decides where a list of models goes).
+.lintIsApplyLike <- function(nm) {
+  .lintIsApply(nm) || grepl("^(pmap|pwalk|map2|walk2|imap|map|walk)(_|$)", nm) ||
+    nm %in% c("Map", "mapply", "rapply", "tapply", "outer")
+}
 # The solve() methods rxode2 registers, which rxode2:::solve.rxUi(mod, ev) and the
 # like call by name.
 .lintSolveMethods <- paste0("solve.", c("rxUi", "rxode2", "function", "rxEt",
@@ -626,11 +637,51 @@
   NA_character_
 }
 
-# Record a place the model is solved; returns its position in acc$sites.
-.lintAddSite <- function(acc, kind, stated, text, opaque = NA_character_) {
+# Record a place the model is solved; returns its position in acc$sites. A site
+# also keeps what the pairing rule reads (lint-pairing.R): the call, the position
+# of the top-level expression holding it (an index into the scan's `exprs`),
+# whether it sits inside a function (and that function's name, parameters and
+# local variables), the argument that is the model and where that model came
+# from.
+.lintAddSite <- function(acc, kind, stated, text, opaque = NA_character_,
+                         call = NULL, model_arg = NULL) {
   id <- length(acc$sites) + 1L
-  acc$sites[[id]] <- list(kind = kind, stated = stated, text = text, opaque = opaque)
+  origin <- if (is.symbol(model_arg)) acc$origins[[as.character(model_arg)]] else NULL
+  acc$sites[[id]] <- list(
+    kind = kind, stated = stated, text = text, opaque = opaque, call = call,
+    top = if (is.null(acc$top_i)) NA_integer_ else acc$top_i,
+    in_fun = !is.null(acc$ctx), fun = acc$ctx$name, params = acc$ctx$params,
+    locals = acc$ctx$locals, path = acc$path, model_arg = model_arg,
+    origin = if (is.null(origin)) NA_character_ else origin$name,
+    modified = !is.null(origin) && isTRUE(origin$modified))
   id
+}
+
+# The library name a model expression was read from, and whether the article
+# changed its equations: readModelDb("X"), modellib("X"), a name assigned from
+# one, or such a call wrapped in ini() / zeroRe() / model() / ... Returns
+# list(name = , modified = ), name NA when it is not a literal.
+.lintModelOrigin <- function(x, acc) {
+  if (.lintIsPipe(x)) x <- .lintDePipe(x)
+  unknown <- list(name = NA_character_, modified = FALSE)
+  if (is.symbol(x)) {
+    o <- acc$origins[[as.character(x)]]
+    return(if (is.null(o)) unknown else o)
+  }
+  if (is.character(x) && length(x) == 1L) return(list(name = x, modified = FALSE))
+  if (!is.call(x)) return(unknown)
+  nm <- .lintCallName(x)
+  args <- as.list(x)[-1L]
+  if (nm %in% c("readModelDb", "modellib") && length(args) >= 1L && is.character(args[[1L]])) {
+    return(list(name = args[[1L]], modified = FALSE))
+  }
+  if (identical(nm, "{") && length(x) >= 2L) return(.lintModelOrigin(x[[length(x)]], acc))
+  if ((nm %in% .lintModelWrappers || nm %in% .lintEventMakers) && length(args) >= 1L) {
+    o <- .lintModelOrigin(args[[1L]], acc)
+    if (nm %in% c("model", "rxAppendModel")) o$modified <- TRUE
+    return(o)
+  }
+  unknown
 }
 
 # Note what a name is assigned from, for later solve() calls. A name assigned
@@ -644,6 +695,7 @@
           else if (name %in% all.vars(rhs)) "same"
           else "none"
   if (identical(kind, "same")) return(invisible(NULL))
+  acc$origins[[name]] <- if (identical(kind, "model")) .lintModelOrigin(rhs, acc) else NULL
   acc$modelnames <- setdiff(acc$modelnames, name)
   acc$containers <- setdiff(acc$containers, name)
   acc$eventnames <- setdiff(acc$eventnames, name)
@@ -741,8 +793,18 @@
   id <- NA_integer_
   if (!is.na(kind)) {
     stated <- if (identical(kind, "indirect") && !member_call) .lintIndirectStates(x) else .lintCallStates(x)
+    model_arg <- NULL
+    if (identical(kind, "rxSolve")) {
+      for (i in seq_along(args)) {
+        if (!identical(args[[i]], quote(expr = )) && .lintIsModel(args[[i]], acc)) {
+          model_arg <- args[[i]]
+          break
+        }
+      }
+    }
     id <- .lintAddSite(acc, kind, stated, .lintCallText(x),
-                       if (kind %in% c("rxSolve", "solve-unresolved")) .lintOpaqueControl(x) else NA_character_)
+                       if (kind %in% c("rxSolve", "solve-unresolved")) .lintOpaqueControl(x) else NA_character_,
+                       call = x, model_arg = model_arg)
   }
   if (.lintIsSolveName(nm) && !(identical(nm, "solve") && local_solve) &&
       !is.null(acc$ctx) && !identical(kind, "rxSolve")) {
@@ -760,12 +822,65 @@
   invisible(NULL)
 }
 
+# The constructs a site is inside, outermost first, for the pairing rule to
+# rebuild the code that runs before it (see .lintSiteTargets()): "block" (the
+# statements before it in a `{` block), "for" (the loop variable and what it
+# loops over), "function" (a named function's name and formals) and "lambda" (an
+# anonymous function's parameters and, when it is handed to lapply() or the
+# like, that call).
+.lintPushFrame <- function(acc, frame) {
+  acc$path[[length(acc$path) + 1L]] <- frame
+  invisible(NULL)
+}
+.lintPopFrame <- function(acc) {
+  acc$path[[length(acc$path)]] <- NULL
+  invisible(NULL)
+}
+
 # Walk a local function's body with its parameters in scope.
 .lintWalkFunction <- function(fn, name, acc) {
   outer <- acc$ctx
-  acc$ctx <- list(name = name, params = names(fn[[2L]]))
+  acc$ctx <- list(name = name, params = names(fn[[2L]]),
+                  locals = setdiff(.lintLocalNames(list(fn[[3L]])), names(fn[[2L]])))
+  .lintPushFrame(acc, list(kind = "function", name = name, formals = fn[[2L]]))
   lapply(as.list(fn)[-1L], .lintWalkSolves, acc = acc)
+  .lintPopFrame(acc)
   acc$ctx <- outer
+  invisible(NULL)
+}
+
+# Walk the children of a call, recording the constructs that hold them.
+.lintWalkKids <- function(nm, parts, kids, acc) {
+  if (identical(nm, "{")) {
+    stmts <- parts[-1L]
+    for (k in seq_along(stmts)) {
+      .lintPushFrame(acc, list(kind = "block", before = stmts[seq_len(k - 1L)]))
+      .lintWalkSolves(stmts[[k]], acc)
+      .lintPopFrame(acc)
+    }
+  } else if (identical(nm, "for") && length(parts) == 4L && is.symbol(parts[[2L]])) {
+    .lintWalkSolves(parts[[3L]], acc)
+    .lintPushFrame(acc, list(kind = "for", var = as.character(parts[[2L]]), over = parts[[3L]]))
+    .lintWalkSolves(parts[[4L]], acc)
+    .lintPopFrame(acc)
+  } else if (identical(nm, "function") && length(parts) >= 3L) {
+    ap <- acc$apply_ctx
+    acc$apply_ctx <- NULL
+    .lintPushFrame(acc, list(kind = "lambda", params = names(parts[[2L]]), apply = ap))
+    lapply(kids, .lintWalkSolves, acc = acc)
+    .lintPopFrame(acc)
+  } else if (.lintIsApplyLike(nm)) {
+    # an anonymous function handed to lapply(), map(), Map(), ... : its
+    # parameters are bound to the first elements of the other arguments
+    is_fn <- vapply(kids, function(k) is.call(k) && identical(.lintCallName(k), "function"), NA)
+    for (i in seq_along(kids)) {
+      if (is_fn[[i]]) acc$apply_ctx <- list(fn = nm, args = kids[!is_fn])
+      .lintWalkSolves(kids[[i]], acc)
+      acc$apply_ctx <- NULL
+    }
+  } else {
+    lapply(kids, .lintWalkSolves, acc = acc)
+  }
   invisible(NULL)
 }
 
@@ -821,7 +936,7 @@
   head_is_name <- is.symbol(parts[[1L]]) || .lintIsNsCall(parts[[1L]])
   kids <- if (head_is_name) parts[-1L] else parts
   kids <- kids[!vapply(kids, .lintIsRxSolveRef, logical(1L), strings = FALSE)]
-  lapply(kids, .lintWalkSolves, acc = acc)
+  .lintWalkKids(nm, parts, kids, acc)
   acc$modelnames <- setdiff(acc$modelnames, scoped)
   invisible(NULL)
 }
@@ -839,6 +954,10 @@
   acc$modelnames <- known
   acc$containers <- character()
   acc$eventnames <- character()
+  acc$origins <- list()
+  acc$path <- list()
+  acc$exprs <- list()
+  acc$top_i <- NULL
   acc$funs <- list()
   acc$topfuns <- character()
   acc$toplevel <- NULL
@@ -859,12 +978,15 @@
       if (length(hit)) acc$unparsed <- c(acc$unparsed, .lintTrunc(hit[[1L]], 60L))
     } else {
       for (e in as.list(ex)) {
+        acc$exprs[[length(acc$exprs) + 1L]] <- e
+        acc$top_i <- length(acc$exprs)
         acc$toplevel <- e
         .lintWalkSolves(e, acc)
       }
     }
   }
-  list(sites = acc$sites, models = unique(acc$models), unparsed = acc$unparsed)
+  list(sites = acc$sites, models = unique(acc$models), unparsed = acc$unparsed,
+       exprs = acc$exprs)
 }
 
 # The end of every lagged-dose fix: the setting to state and what it needs.
@@ -1126,7 +1248,8 @@
 #' @param max_per_arm Maximum simulated participants per arm (default 200).
 #' @return An `nli_vignette_lint` list with `issues` (data frame) and `n`.
 #' @export
-lint_vignette <- function(rmd, model = NULL, max_per_arm = 200L) {
+lint_vignette <- function(rmd, model = NULL, max_per_arm = 200L,
+                          pairing = getOption("nlmixr2libingest.lint_pairing", TRUE)) {
   if (!file.exists(rmd)) {
     return(structure(list(
       issues = .lintIssue("file", "error", paste0("vignette not found: ", rmd),
@@ -1276,6 +1399,12 @@ lint_vignette <- function(rmd, model = NULL, max_per_arm = 200L) {
   # 6. Lagged-dose f() covariates: the solve must say which covariate
   #    convention it uses (see .lintLaggedDose()).
   iss <- c(iss, .lintLaggedDose(scan, models))
+
+  # 7. Lagged-dose pairing: the event table each simulation is given, checked
+  #    against the covariates the lagged doses' f() / rate() / dur() read (see
+  #    .lintPairing()). It runs the code that builds the event table, in a
+  #    sandbox, so it can be turned off.
+  if (isTRUE(pairing)) iss <- c(iss, .lintPairing(scan, models))
 
   issues <- if (length(iss)) do.call(rbind, iss) else
     data.frame(check = character(), severity = character(),

@@ -1,3 +1,8 @@
+# The lagged-dose pairing rule runs the code that builds each simulation's event
+# table; these tests are about the other rules, whose articles leave the event
+# table undefined, so it is off here (test-lint-pairing.R tests it).
+withr::local_options(nlmixr2libingest.lint_pairing = FALSE)
+
 test_that("lint_vignette flags oversized cohort, named-scalar amt, and PKNCA zero-row", {
   rmd <- tempfile(fileext = ".Rmd")
   writeLines(c(

@@ -194,3 +194,68 @@ knitr_ran <- function(chunks) {
   out <- unlist(strsplit(knitr::knit(text = src, quiet = TRUE, envir = new.env()), "\n"))
   vapply(seq_along(chunks), function(i) any(grepl(sprintf("^## RAN_%d$", i), out)), NA)
 }
+
+# --- helpers for the pairing-rule tests -----------------------------------------------
+
+# A model whose depot has alag(), f(), rate() and dur(), all reading the
+# covariate OCC; `lag` is the alag() right-hand side.
+make_pair_model <- function(lag = "exp(ltlag) * (1 + OCC)",
+                            f = "exp(lf) * (1 + e_occ * OCC)", pre = character()) {
+  txt <- c(
+    "function() {",
+    'covariateData <- list(OCC = list(description = "occasion", units = "(count)", type = "categorical"))',
+    "ini({ lka <- log(1); lcl <- log(2); lvc <- log(10); prop.sd <- 0.1 })",
+    "model({",
+    "  ka <- exp(lka); cl <- exp(lcl); vc <- exp(lvc)",
+    "  lf <- 0; e_occ <- -0.2; ltlag <- log(0.25)",
+    pre,
+    "  d/dt(depot) <- -ka * depot",
+    "  d/dt(central) <- ka * depot - cl / vc * central",
+    paste0("  f(depot) <- ", f),
+    "  rate(depot) <- 50 * (1 + OCC)",
+    "  dur(depot) <- 2 * (1 + OCC)",
+    paste0("  alag(depot) <- ", lag),
+    "  Cc <- central / vc",
+    "  Cc ~ prop(prop.sd)",
+    "})",
+    "}")
+  eval(parse(text = txt))
+}
+
+# The pairing spec of a model, with the sandbox environment the lag is run in.
+pair_spec <- function(...) {
+  spec <- .lintLagSpec(rxode2::rxode2(make_pair_model(...)))
+  spec$env <- .lintSandboxEnv()
+  spec
+}
+
+# An event table from compact records: each record is c(time, kind, OCC) with kind
+# "d" (dose) or "o" (observation), in data order. `rate` is the rate column of the
+# doses (0 for a bolus); `dur` adds a fixed-duration column instead.
+pair_events <- function(records, rate = 0, dur = NULL, id = 1L) {
+  time <- vapply(records, function(r) as.numeric(r[[1L]]), 0)
+  kind <- vapply(records, function(r) as.character(r[[2L]]), "")
+  occ <- vapply(records, function(r) as.numeric(r[[3L]]), 0)
+  ev <- data.frame(id = id, time = time, evid = ifelse(kind == "d", 1L, 0L),
+                   amt = ifelse(kind == "d", 100, NA_real_),
+                   cmt = ifelse(kind == "d", "depot", "central"), OCC = occ,
+                   stringsAsFactors = FALSE)
+  if (is.null(dur)) ev$rate <- ifelse(kind == "d", rate, NA_real_)
+  else ev$dur <- ifelse(kind == "d", dur, NA_real_)
+  ev
+}
+
+# The pairing differences of an event table under a setting: a data frame, or NULL.
+pair_diffs <- function(ev, setting, spec = pair_spec(lag = "0.5")) {
+  recs <- .lintEventRecords(ev, spec)
+  stopifnot(isTRUE(recs$ok))
+  .lintPairCheck(recs$rec, spec, setting, new.env(parent = emptyenv()))
+}
+
+# lint_vignette() with the pairing rule on, for an article holding `code`.
+pair_lint <- function(code, model = make_pair_model(lag = "0.5"), ...) {
+  lint_vignette(write_article(code, ...), model = model, pairing = TRUE)
+}
+
+# The pairing findings of a lint result.
+pair_checks <- function(res) res$issues$check[grepl("^lagged-dose-pairing", res$issues$check)]
