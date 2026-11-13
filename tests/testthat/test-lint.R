@@ -192,7 +192,8 @@ test_that("a lagged covariate-dependent f() without the setting is flagged", {
   expect_match(msg, "addlKeepsCov = TRUE and nonmem = TRUE read the dose record for a bolus, which is NONMEM's pairing, but the record before the dose for an infusion.", fixed = TRUE)
   expect_match(msg, "Give every record the covariates of the dose that opened its interval, state addlKeepsCov = FALSE, and say in the article that you did.", fixed = TRUE)
   expect_match(msg, "TRUE or nonmem = TRUE also passes this check, but matches NONMEM only for bolus doses.", fixed = TRUE)
-  # the setting is no longer called NONMEM's
+  # TRUE is not presented as NONMEM's behaviour in general, and the author is
+  # told which setting to state rather than left to choose one
   expect_false(grepl("NONMEM uses", msg, fixed = TRUE))
   expect_false(grepl("which you chose", msg, fixed = TRUE))
 })
@@ -233,9 +234,12 @@ test_that("every lagged-dose finding recommends FALSE and says TRUE matches NONM
       expect_false(grepl("which you chose", txt, fixed = TRUE), info = nm)
     }
   }
-  # the finding for an unreadable model says nothing about the setting
-  expect_false(any(grepl("NONMEM", lagged_one("sim <- solve(Some_Model, ev)",
-                                              model = "Some_Model")$issues$message)))
+  # the finding for a model that cannot be read does not mention NONMEM
+  res <- lagged_one("sim <- solve(Some_Model, ev)", model = "Some_Model")
+  expect_identical(lagged_checks(res), "addlkeepscov-model")
+  expect_identical(res$n, 1L)
+  expect_match(res$issues$message, "cannot read ", fixed = TRUE)
+  expect_false(grepl("NONMEM", res$issues$message, fixed = TRUE))
 })
 
 test_that("addlKeepsCov = TRUE, addlKeepsCov = FALSE and nonmem = TRUE all pass", {
