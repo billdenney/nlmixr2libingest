@@ -79,9 +79,9 @@ dose record's own covariates, which is NONMEM's pairing. For an infusion
 \code{TRUE} and \code{nonmem = TRUE} never read the dose's own record: a fixed-rate
 infusion reads the record before the dose, and \code{rate = -1} and \code{-2} read it
 too unless a record shares the dose's time, which then supplies \code{f()}.
-\code{FALSE} reads the dose's own record unless a record shares the dose's time,
-which supplies \code{f()} for \code{rate = -1} and \code{-2} (the record before the dose, for
-a fixed rate); a record inside the lag window does not override it. A modelled
+\code{FALSE} reads the dose's own record for every infusion type unless a record
+shares the dose's time, which then supplies \code{f()} whatever the row order; a
+record inside the lag window does not override it. A modelled
 \code{rate()} or \code{dur()} comes from a record at the dose's time or inside the lag
 window under every setting, except under \code{nonmem = TRUE} when that record's
 row is written before the dose. Without a lag every setting reads the dose's
