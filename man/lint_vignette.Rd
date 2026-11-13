@@ -90,23 +90,28 @@ dose's own record, while \code{addlKeepsCov = TRUE} and \code{nonmem = TRUE} rea
 dose record's own covariates, which is NONMEM's pairing. For an infusion
 (\code{rate = -2} with \code{dur()}, \code{rate = -1} with \code{rate()}, or a fixed rate),
 \code{TRUE} and \code{nonmem = TRUE} never read the dose's own record. \code{rate = -1} and
-\code{-2} read the last record before the dose, or an observation at the dose's
-time, which then supplies \code{f()}. A fixed rate (\code{rate} above 0) reads a record
-that cannot be pinned to the dose or its neighbours: with records at 0, 10
-and 20 and a dose at 24, \code{f()} came from the record at 0, not the one at 20;
-with the first record at 5, 3 or 1 it came from the dose's own record; a
-record at the arrival time (24.5) or just after it (24.7, lag 0.5) supplied
-it, and one at 26 or 40 did not. \code{FALSE} reads the dose's own record for
-every infusion type unless an observation shares the dose's time, which then
-supplies \code{f()} whatever the row order; a record inside the lag window does
-not override it. A fixed duration (a \code{dur} column, no \code{rate}) reads like a
-bolus. A modelled \code{rate()} or \code{dur()} comes from an observation at the dose's
-time or inside the lag window (not at the arrival time itself; a dose in the
-window does not supply it) under every setting, except under \code{nonmem = TRUE}
-when that record's row is written before the dose. Without a lag every
-setting reads the dose's own record. What is right for every dose type is an
-event table in which each record carries the covariates of the dose that
-opened its interval, with \code{addlKeepsCov = FALSE}; the rule accepts \code{TRUE} and
+\code{-2} read the last record before the dose, or a record at the dose's time
+other than a dose into the same compartment (an observation, or a dose into
+another compartment), which then supplies \code{f()}. A fixed rate (\code{rate} above
+0) reads a record that cannot be pinned to the dose or its neighbours: with
+records at 0, 10 and 20 and a dose at 24, \code{f()} came from the record at 0, not
+the one at 20; with the first record at 5, 3 or 1 it came from the dose's own
+record; a record at the arrival time (24.5) or just after it (24.7, lag 0.5)
+supplied it, and one at 26 or 40 did not; how far after the arrival a record
+reaches depends on the dose's amount. \code{FALSE} reads the dose's own record for
+every infusion type unless a record other than a dose into the same
+compartment shares the dose's time, which then supplies \code{f()} whatever the row
+order (a bolus ignores a dose into another compartment at its time, an
+infusion reads it); a record inside the lag window does not override it. A
+fixed duration (a \code{dur} column, no \code{rate}) reads like a bolus. A modelled
+\code{rate()} or \code{dur()} comes from a record at the dose's time or inside the lag
+window (not at the arrival time itself) under every setting, except under
+\code{nonmem = TRUE} when that record's row is written before the dose: an
+observation supplies it, so can a dose into another compartment, and a dose
+into the same compartment does not. Without a lag every setting reads the
+dose's own record. What is right for every dose type is an event table in
+which each record carries the covariates of the dose that opened its
+interval, with \code{addlKeepsCov = FALSE}; the rule accepts \code{TRUE} and
 \code{nonmem = TRUE} too, but they match NONMEM only for bolus doses. The rule
 checks that the setting is stated, not the event table.
 
