@@ -1,0 +1,58 @@
+# Work parked on purpose. Each entry leaves this file in the commit that resolves
+# it, so what is here is what is still open; git holds the record of what was
+# deferred. tests/testthat/test-deferred.R fails for an entry past its
+# revisit_by: resolve it, or move the date and say why in the commit message.
+#
+# It lives in inst/design/ rather than a top-level design/ so that it ships with
+# the package and the date check runs under R CMD check; this package is
+# internal, so a date-triggered failure reaches no CRAN user.
+- id: lint-pairing-addl-ss-expansion
+  description: >-
+    The lagged-dose pairing rule reports a table with addl or steady-state (ss)
+    doses as not verifiable. Expanding them needs a measurement of how an
+    expanded dose pairs with the records around it (it has no row of its own),
+    which is the case addlKeepsCov was made for. Of the 38 articles the rule
+    could not check on the corpus sweep, 22 use addl.
+  pointer: >-
+    ?lint_vignette ("What it does not check"); .lintEventRecords() in
+    R/lint-pairing.R; pinned by the "addl and ss tables" test in
+    tests/testthat/test-deferred.R.
+  revisit_by: "2027-02-15"
+- id: lint-pairing-neighbouring-doses-oracle
+  description: >-
+    How a lagged dose's f(), rate() and dur() read the records around it when
+    another dose is near was measured only for a bolus's f(), for a dose into
+    another compartment, and by the lagged-dose session's reproductions. The
+    rule is conservative there (a dose at the dose's time or inside the lag
+    window is a candidate for every quantity; a dose at its time adds the later
+    records) and the randomised differential test against rxode2 is restricted
+    to doses at or after the dose, because an earlier infusion in flight into
+    another compartment made the quantity measured on one compartment name no
+    single record. Needs an oracle that separates the doses, and same-compartment
+    next doses (the lag longer than the interval).
+  pointer: >-
+    header of R/lint-pairing.R and .lintPairCandidates(); the differential tests
+    in tests/testthat/test-lint-pairing.R; pinned by the "a dose next to the
+    dose" test in tests/testthat/test-deferred.R.
+  revisit_by: "2027-03-15"
+- id: lint-pairing-dose-record-covariate-on-ka
+  description: >-
+    A dose record's covariates were reported to apply to continuous parameters
+    such as ka from the dose time under addlKeepsCov = FALSE and from absorption
+    under TRUE (Punyawudho 2025, 0.1-0.3% in Cc). The pairing rule only compares
+    the covariates f(), rate() and dur() read, so this effect is not detected,
+    and it was not reproduced in this repository.
+  pointer: >-
+    nlmixr2lib branch fix/lagged-dose-covariate-notes,
+    .claude/skills/extract-literature-model/references/known-vignette-failure-patterns.md
+    and the lagged-dose session's reproductions.
+  revisit_by: "2027-02-15"
+- id: lint-vignette-cli-smoke-job
+  description: >-
+    inst/scripts/lint_vignette.R is exercised by no automated job (the test only
+    parses it); it was run by hand with and without --no-pairing and its exit
+    codes checked (1 with findings, 0 clean, 2 usage). A job that runs it on a
+    tiny article and a missing file would stop it rotting.
+  pointer: >-
+    inst/scripts/lint_vignette.R; .github/workflows/R-CMD-check.yaml.
+  revisit_by: "2027-02-15"

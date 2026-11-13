@@ -49,8 +49,9 @@
 # The cells follow the measurements in the header of this file. The behaviour
 # next to another dose was only measured for a bolus's f() and for a dose into
 # another compartment, so the rule is wider there: a dose at the dose's time or
-# inside the lag window is a candidate for every quantity, and a dose at the
-# dose's time makes every later record a candidate for rate() / dur().
+# inside the lag window is a candidate for every quantity, a dose at the dose's
+# time also makes the record before the dose a candidate for an infusion's f(),
+# and makes every later record a candidate for rate() / dur().
 .lintPairCandidates <- function(time, i, lag, qty, type, setting,
                                 dose = rep(FALSE, length(time))) {
   if (!is.na(lag) && lag <= 0) return(integer())
@@ -66,10 +67,12 @@
     return(switch(
       type,
       bolus = , dur = if (identical(setting, "FALSE")) c(at, closed) else integer(),
-      fixed = if (identical(setting, "FALSE")) at else others,
+      fixed = if (identical(setting, "FALSE")) c(at, if (any(dose[at])) prev) else others,
       # a modelled rate reads the record at its time, else the record before it,
-      # and the next record inside the window when it is the subject's first
-      modelled = if (identical(setting, "FALSE")) at else c(at, prev, if (!length(prev)) open),
+      # and the next record inside the window when it is the subject's first; a
+      # dose at its time (into the same compartment) leaves the record before it
+      modelled = if (identical(setting, "FALSE")) c(at, if (any(dose[at])) prev)
+                 else c(at, prev, if (!length(prev)) open),
       stop("unknown dose type: ", type, call. = FALSE)))
   }
   cand <- c(at, open)

@@ -105,8 +105,13 @@ test_that("a dose next to the dose widens the candidates", {
     sort(.lintPairCandidates(time, 2L, 0.5, qty, type, setting, dose))
   }
   expect_identical(cand("f", "bolus", "FALSE"), 3L)
-  expect_identical(cand("f", "modelled", "FALSE"), 3L)
+  # a dose at the dose's time leaves the record before the dose a candidate for an infusion's f()
+  expect_identical(cand("f", "modelled", "FALSE"), c(1L, 3L))
+  expect_identical(cand("f", "fixed", "FALSE"), c(1L, 3L))
   expect_identical(cand("f", "modelled", "TRUE"), c(1L, 3L))
+  # with an observation at the dose's time the record before is not one under FALSE
+  expect_identical(sort(.lintPairCandidates(c(20, 24, 24, 26), 2L, 0.5, "f", "modelled", "FALSE",
+                                            c(FALSE, TRUE, FALSE, FALSE))), 3L)
   # rate() / dur(): the dose at the dose's time, and every later record
   expect_identical(cand("rate", "modelled", "FALSE"), 3:4)
   expect_identical(cand("rate", "modelled", "nonmem"), 3:4)
@@ -905,28 +910,40 @@ oracle_models <- function() {
 
 # One random table: observations around a dose at time 20, in random order at
 # equal times. Returns list(ev = <data frame>, target = <row of the designated dose>).
-oracle_table <- function(lag, type) {
+oracle_table <- function(lag, type, amt = 100, doses = FALSE) {
   t0 <- 20
   pool <- c(t0 - 10, t0 - 5, t0 - 1, t0, t0, t0 + lag / 2, t0 + lag, t0 + lag + 0.25, t0 + 3)
   n <- sample(1:5, 1L)
   time <- c(t0, sample(pool, n, replace = TRUE))
-  # the other records are observations: a dose next to the target puts two
-  # infusions in flight and the quantity measured on one compartment no longer
+  # the other records are observations, or with `doses` also doses into another
+  # compartment at the target's time or after it: a dose before the target puts
+  # an infusion in flight and the quantity measured on one compartment no longer
   # names a single record
-  is_dose <- c(TRUE, rep(FALSE, n))
+  is_dose <- c(TRUE, if (doses) runif(n) < 0.4 & time[-1L] >= t0 else rep(FALSE, n))
   ord <- order(time, runif(length(time)))
   time <- time[ord]
   is_dose <- is_dose[ord]
   target <- which(ord == 1L)
   k <- length(time)
   ev <- data.frame(id = 1, time = time, evid = ifelse(is_dose, 1L, 0L),
-                   amt = ifelse(is_dose, 100, NA_real_),
+                   amt = ifelse(is_dose, amt, NA_real_),
                    cmt = ifelse(is_dose, ifelse(seq_len(k) == target, "depot", "depot2"), "central"),
                    V = seq_len(k))
   if (identical(type, "dur")) ev$dur <- ifelse(is_dose, 2, NA_real_)
   else ev$rate <- ifelse(is_dose, type, NA_real_)
-  list(ev = ev, target = target, is_dose = is_dose)
+  list(ev = ev, target = target, is_dose = is_dose, amt = amt)
 }
+
+# The records the solver saw: the table and the measuring record appended to it,
+# as record times and which of them are doses. The measuring record (V = 99) is
+# the last record of the table, so a read of "a later record" can land on it.
+oracle_seen <- function(tbl, lag, what) {
+  t_meas <- if (identical(what, "f")) max(tbl$ev$time) + 50 else max(tbl$ev$time, tbl$ev$time[[tbl$target]] + lag) + 1
+  list(time = c(tbl$ev$time, t_meas), dose = c(tbl$is_dose, FALSE))
+}
+
+# The record number a supplier V names: V is the record's index, 99 the measuring record.
+oracle_record <- function(v, tbl) if (v == 99) length(tbl$ev$time) + 1L else as.integer(v)
 
 # Which record (its V) supplied f() or rate() of the designated dose.
 oracle_supplier <- function(models, tbl, lag, what, setting) {
@@ -942,9 +959,11 @@ oracle_supplier <- function(models, tbl, lag, what, setting) {
   r <- do.call(rxode2::rxSolve, c(list(models[[what]], c(LAG = lag), ev, addDosing = FALSE,
                                        returnType = "data.frame"), args))
   if (identical(what, "f")) {
-    round(r$central[r$time == meas$time][[1L]] / 100 * 1000)
+    round(r$central[r$time == meas$time][[1L]] / tbl$amt * 1000)
   } else {
-    round(r$depot[r$time == meas$time][[1L]] / (tm - (ev$time[[tbl$target]] + lag)))
+    depot <- r$depot[r$time == meas$time][[1L]]
+    # the measuring record's rate (99) has emptied the dose by the time it is read
+    if (isTRUE(all.equal(depot, 100))) 99 else round(depot / (tm - (ev$time[[tbl$target]] + lag)))
   }
 }
 
@@ -963,10 +982,41 @@ test_that("the record rxode2 reads is always one the rule treats as a candidate 
     for (st in settings) {
       for (what in if (is.numeric(type) && type < 0) c("f", "rate") else "f") {
         got <- oracle_supplier(models, tbl, lag, what, st)
-        cand <- .lintPairCandidates(tbl$ev$time, tbl$target, lag, what, type_of(type), st, tbl$is_dose)
+        seen <- oracle_seen(tbl, lag, what)
+        cand <- .lintPairCandidates(seen$time, tbl$target, lag, what, type_of(type), st, seen$dose)
         info <- sprintf("type %s lag %s %s %s: times %s, target %d, supplier %s", type, lag, what, st,
                         paste(tbl$ev$time, collapse = " "), tbl$target, got)
-        expect_true(got %in% c(tbl$target, cand), info = info)
+        expect_true(oracle_record(got, tbl) %in% c(tbl$target, cand), info = info)
+        checked <- checked + 1L
+      }
+    }
+  }
+  expect_gt(checked, 100L)
+})
+
+test_that("doses into another compartment at or after the dose, and other amounts, stay candidates", {
+  skip_on_cran()
+  skip_if_not_installed("rxode2")
+  models <- oracle_models()
+  set.seed(20260714)
+  settings <- c("FALSE", "TRUE", "nonmem")
+  type_of <- function(type) if (identical(type, "dur")) "dur" else if (type == 0) "bolus" else if (type > 0) "fixed" else "modelled"
+  checked <- 0L
+  for (rep in 1:40) {
+    type <- sample(list(0, 50, -1, -2, "dur"), 1L)[[1L]]
+    lag <- sample(c(0.5, 1), 1L)
+    # the amount sets how long a fixed-rate infusion runs, which changes how far
+    # after the arrival a record can be read
+    amt <- if (identical(type, 50)) sample(c(100, 101, 200), 1L) else 100
+    tbl <- oracle_table(lag, type, amt, doses = TRUE)
+    for (st in settings) {
+      for (what in if (is.numeric(type) && type < 0) c("f", "rate") else "f") {
+        got <- oracle_supplier(models, tbl, lag, what, st)
+        seen <- oracle_seen(tbl, lag, what)
+        cand <- .lintPairCandidates(seen$time, tbl$target, lag, what, type_of(type), st, seen$dose)
+        info <- sprintf("type %s amt %s lag %s %s %s: times %s kinds %s, target %d, supplier %s", type, amt, lag, what, st,
+                        paste(tbl$ev$time, collapse = " "), paste(ifelse(tbl$is_dose, "D", "o"), collapse = ""), tbl$target, got)
+        expect_true(oracle_record(got, tbl) %in% c(tbl$target, cand), info = info)
         checked <- checked + 1L
       }
     }
@@ -987,7 +1037,7 @@ test_that("the rule's known-answer cells agree with rxode2 for the measured layo
     k <- length(time)
     list(ev = data.frame(id = 1, time = time, evid = ifelse(is_dose, 1L, 0L), amt = ifelse(is_dose, 100, NA_real_),
                          cmt = ifelse(is_dose, "depot", "central"), rate = ifelse(is_dose, 0, NA_real_), V = seq_len(k)),
-         target = which(is_dose), is_dose = is_dose)
+         target = which(is_dose), is_dose = is_dose, amt = 100)
   }
   # bolus, f(): FALSE reads the record at the dose's time (either order) and one in the window
   for (case in list(list(24, TRUE), list(24, FALSE), list(24.25, FALSE))) {
