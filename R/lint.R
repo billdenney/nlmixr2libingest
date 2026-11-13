@@ -167,22 +167,31 @@
 #
 # A dose delayed by alag() is applied when it ARRIVES, so which record's
 # covariates its f() reads depends on the setting and on the dose type
-# (measured on rxode2 5.1.8.9000, e4cb67f6; two occasions with different f()):
+# (measured on rxode2 5.1.8.9000, e4cb67f6 and c865aa8, with a different value on
+# each candidate record: the one before the dose, the dose's own, and one other
+# record at the dose's time or inside the lag window):
 #   bolus dose
-#     addlKeepsCov = FALSE (the default) reads the record in force at arrival:
-#       a co-timed record sorted after the dose, or one inside the lag window,
-#       that still carries the previous occasion's covariate wins.
+#     addlKeepsCov = FALSE (the default) reads the record in force at arrival,
+#       so a record at the dose's time (written before or after the dose) or one
+#       inside the lag window wins over the dose's own record.
 #     addlKeepsCov = TRUE and nonmem = TRUE read the dose record's own
 #       covariates, which is NONMEM's pairing.
-#   infusion (rate = -2 with dur(), or a fixed rate)
-#     FALSE reads the dose record's own covariates, unless a co-timed record
-#       follows it; a record inside the lag window does not override it.
-#     TRUE and nonmem = TRUE read the record BEFORE the dose, even with no other
-#       records, so they are not NONMEM's pairing here.
-# Without a lag every setting agrees. What is right for every dose type is an
-# event table in which each record carries the covariates of the dose that
-# opened its interval, with addlKeepsCov = FALSE. The rule asks only that the
-# setting be stated; it does not read the event table.
+#   infusion (rate = -2 with dur(), rate = -1 with rate(), or a fixed rate)
+#     TRUE and nonmem = TRUE never read the dose's own record. A fixed-rate
+#       infusion reads the record before the dose; rate = -1 and -2 read it
+#       too, unless a record shares the dose's time, which then supplies f()
+#       whatever the row order.
+#     FALSE reads the dose's own record, unless a record shares the dose's time:
+#       that record supplies f() for rate = -1 and -2, and the record before the
+#       dose for a fixed rate. A record inside the lag window does not override
+#       it.
+#   modelled rate() and dur() (rate = -1 and -2): a record at the dose's time or
+#     inside the lag window supplies them under every setting, except under
+#     nonmem = TRUE when that record's row is written before the dose.
+# Without a lag every setting reads the dose's own record. What is right for
+# every dose type is an event table in which each record carries the covariates
+# of the dose that opened its interval, with addlKeepsCov = FALSE. The rule asks
+# only that the setting be stated; it does not read the event table.
 
 # Record every assignment of a model() block into `acc`:
 #   acc$deps    named list, variable -> the names its right-hand sides read,
@@ -900,16 +909,18 @@
                  paste(covs, collapse = ", "), ". ")
   why <- paste0("With alag(), which record supplies f()'s covariates depends on the ",
                 "setting and the dose type. By default (addlKeepsCov = FALSE) a bolus ",
-                "dose reads the record in force when it arrives, so a co-timed or ",
-                "lag-window record carrying the previous occasion's covariates changes ",
-                "the bioavailability, and an infusion (rate = -2 with dur(), or a fixed ",
-                "rate) reads its own record unless a co-timed record follows it. ",
-                "addlKeepsCov = TRUE and nonmem = TRUE read the dose record for a bolus, ",
-                "which is NONMEM's pairing, but the record before the dose for an ",
-                "infusion. Give every record the covariates of the dose that opened its ",
-                "interval, state addlKeepsCov = FALSE, and say in the article that you ",
-                "did. TRUE or nonmem = TRUE also passes this check, but matches NONMEM ",
-                "only for bolus doses.")
+                "dose reads the record in force when it arrives, so a record at the ",
+                "dose's time or inside the lag window that carries another occasion's ",
+                "covariates changes the bioavailability, and an infusion (rate = -1, ",
+                "rate = -2 or a fixed rate) reads its own record unless another record ",
+                "shares its dose time. addlKeepsCov = TRUE and nonmem = TRUE read the ",
+                "dose's own record for a bolus, which is NONMEM's pairing, but for an ",
+                "infusion they read the record before the dose or a record at the ",
+                "dose's time, not the dose's own record. Give every record the ",
+                "covariates of the dose that opened its interval, state ",
+                "addlKeepsCov = FALSE, and say in the article that you did. TRUE or ",
+                "nonmem = TRUE also passes this check, but matches NONMEM only for ",
+                "bolus doses.")
   for (s in scan$sites) {
     if (s$stated) next
     if (s$kind == "rxSolve" && is.na(s$opaque)) {
@@ -1008,21 +1019,29 @@
 #' to resolve or report every form the rule can read, and to list here what it
 #' cannot.
 #'
-#' *Which setting.* Measured on rxode2 5.1.8.9000 (commit e4cb67f6), with two
-#' occasions that have different `f()`: for a bolus dose,
-#' `addlKeepsCov = FALSE` (the default) reads the record in force when the dose
-#' arrives, so a co-timed record sorted after the dose, or one inside the lag
-#' window, that still carries the previous occasion's covariates decides, while
-#' `addlKeepsCov = TRUE` and `nonmem = TRUE` read the dose record's own
-#' covariates, which is NONMEM's pairing. For an infusion (`rate = -2` with
-#' `dur()`, or a fixed rate), `FALSE` reads the dose record's own covariates
-#' unless a co-timed record follows it, and `TRUE` and `nonmem = TRUE` read the
-#' record *before* the dose, even with no other records, so they do not match
-#' NONMEM there. Without a lag every setting agrees. What is right for every
-#' dose type is an event table in which each record carries the covariates of
-#' the dose that opened its interval, with `addlKeepsCov = FALSE`; the rule
-#' accepts `TRUE` and `nonmem = TRUE` too, but they match NONMEM only for bolus
-#' doses. The rule checks that the setting is stated, not the event table.
+#' *Which setting.* Measured on rxode2 5.1.8.9000 (commits e4cb67f6 and
+#' c865aa8), with a different value on each candidate record: the one before
+#' the dose, the dose's own, and one other record at the dose's time or inside
+#' the lag window. For a bolus dose, `addlKeepsCov = FALSE` (the default) reads
+#' the record in force when the dose arrives, so a record at the dose's time
+#' (written before or after the dose) or inside the lag window wins over the
+#' dose's own record, while `addlKeepsCov = TRUE` and `nonmem = TRUE` read the
+#' dose record's own covariates, which is NONMEM's pairing. For an infusion
+#' (`rate = -2` with `dur()`, `rate = -1` with `rate()`, or a fixed rate),
+#' `TRUE` and `nonmem = TRUE` never read the dose's own record: a fixed-rate
+#' infusion reads the record before the dose, and `rate = -1` and `-2` read it
+#' too unless a record shares the dose's time, which then supplies `f()`.
+#' `FALSE` reads the dose's own record unless a record shares the dose's time,
+#' which supplies `f()` for `rate = -1` and `-2` (the record before the dose, for
+#' a fixed rate); a record inside the lag window does not override it. A modelled
+#' `rate()` or `dur()` comes from a record at the dose's time or inside the lag
+#' window under every setting, except under `nonmem = TRUE` when that record's
+#' row is written before the dose. Without a lag every setting reads the dose's
+#' own record. What is right for every dose type is an event table in which each
+#' record carries the covariates of the dose that opened its interval, with
+#' `addlKeepsCov = FALSE`; the rule accepts `TRUE` and `nonmem = TRUE` too, but
+#' they match NONMEM only for bolus doses. The rule checks that the setting is
+#' stated, not the event table.
 #'
 #' *What counts as a simulation.* `rxSolve()` in any spelling (`rxode2::`,
 #' `rxSolve.default`, native or magrittr pipes, arguments over several lines).

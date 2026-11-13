@@ -67,21 +67,29 @@ result changes when a covariate changes between occasions. The contract is
 to resolve or report every form the rule can read, and to list here what it
 cannot.
 
-\emph{Which setting.} Measured on rxode2 5.1.8.9000 (commit e4cb67f6), with two
-occasions that have different \code{f()}: for a bolus dose,
-\code{addlKeepsCov = FALSE} (the default) reads the record in force when the dose
-arrives, so a co-timed record sorted after the dose, or one inside the lag
-window, that still carries the previous occasion's covariates decides, while
-\code{addlKeepsCov = TRUE} and \code{nonmem = TRUE} read the dose record's own
-covariates, which is NONMEM's pairing. For an infusion (\code{rate = -2} with
-\code{dur()}, or a fixed rate), \code{FALSE} reads the dose record's own covariates
-unless a co-timed record follows it, and \code{TRUE} and \code{nonmem = TRUE} read the
-record \emph{before} the dose, even with no other records, so they do not match
-NONMEM there. Without a lag every setting agrees. What is right for every
-dose type is an event table in which each record carries the covariates of
-the dose that opened its interval, with \code{addlKeepsCov = FALSE}; the rule
-accepts \code{TRUE} and \code{nonmem = TRUE} too, but they match NONMEM only for bolus
-doses. The rule checks that the setting is stated, not the event table.
+\emph{Which setting.} Measured on rxode2 5.1.8.9000 (commits e4cb67f6 and
+c865aa8), with a different value on each candidate record: the one before
+the dose, the dose's own, and one other record at the dose's time or inside
+the lag window. For a bolus dose, \code{addlKeepsCov = FALSE} (the default) reads
+the record in force when the dose arrives, so a record at the dose's time
+(written before or after the dose) or inside the lag window wins over the
+dose's own record, while \code{addlKeepsCov = TRUE} and \code{nonmem = TRUE} read the
+dose record's own covariates, which is NONMEM's pairing. For an infusion
+(\code{rate = -2} with \code{dur()}, \code{rate = -1} with \code{rate()}, or a fixed rate),
+\code{TRUE} and \code{nonmem = TRUE} never read the dose's own record: a fixed-rate
+infusion reads the record before the dose, and \code{rate = -1} and \code{-2} read it
+too unless a record shares the dose's time, which then supplies \code{f()}.
+\code{FALSE} reads the dose's own record unless a record shares the dose's time,
+which supplies \code{f()} for \code{rate = -1} and \code{-2} (the record before the dose, for
+a fixed rate); a record inside the lag window does not override it. A modelled
+\code{rate()} or \code{dur()} comes from a record at the dose's time or inside the lag
+window under every setting, except under \code{nonmem = TRUE} when that record's
+row is written before the dose. Without a lag every setting reads the dose's
+own record. What is right for every dose type is an event table in which each
+record carries the covariates of the dose that opened its interval, with
+\code{addlKeepsCov = FALSE}; the rule accepts \code{TRUE} and \code{nonmem = TRUE} too, but
+they match NONMEM only for bolus doses. The rule checks that the setting is
+stated, not the event table.
 
 \emph{What counts as a simulation.} \code{rxSolve()} in any spelling (\verb{rxode2::},
 \code{rxSolve.default}, native or magrittr pipes, arguments over several lines).

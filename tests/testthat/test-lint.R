@@ -187,9 +187,9 @@ test_that("a lagged covariate-dependent f() without the setting is flagged", {
   expect_match(msg, "rxode2::rxSolve(mod, events = ev, nSub = 10)", fixed = TRUE)
   expect_match(msg, "covariate(s) FED.", fixed = TRUE)
   expect_match(msg, "With alag(), which record supplies f()'s covariates depends on the setting and the dose type.", fixed = TRUE)
-  expect_match(msg, "By default (addlKeepsCov = FALSE) a bolus dose reads the record in force when it arrives", fixed = TRUE)
-  expect_match(msg, "an infusion (rate = -2 with dur(), or a fixed rate) reads its own record unless a co-timed record follows it.", fixed = TRUE)
-  expect_match(msg, "addlKeepsCov = TRUE and nonmem = TRUE read the dose record for a bolus, which is NONMEM's pairing, but the record before the dose for an infusion.", fixed = TRUE)
+  expect_match(msg, "By default (addlKeepsCov = FALSE) a bolus dose reads the record in force when it arrives, so a record at the dose's time or inside the lag window that carries another occasion's covariates changes the bioavailability", fixed = TRUE)
+  expect_match(msg, "an infusion (rate = -1, rate = -2 or a fixed rate) reads its own record unless another record shares its dose time.", fixed = TRUE)
+  expect_match(msg, "addlKeepsCov = TRUE and nonmem = TRUE read the dose's own record for a bolus, which is NONMEM's pairing, but for an infusion they read the record before the dose or a record at the dose's time, not the dose's own record.", fixed = TRUE)
   expect_match(msg, "Give every record the covariates of the dose that opened its interval, state addlKeepsCov = FALSE, and say in the article that you did.", fixed = TRUE)
   expect_match(msg, "TRUE or nonmem = TRUE also passes this check, but matches NONMEM only for bolus doses.", fixed = TRUE)
   # TRUE is not presented as NONMEM's behaviour in general, and the author is
