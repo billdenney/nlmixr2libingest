@@ -194,7 +194,7 @@ test_that("a lagged covariate-dependent f() without the setting is flagged", {
   expect_match(msg, "With alag(), which record supplies f()'s covariates depends on the setting and the dose type.", fixed = TRUE)
   expect_match(msg, "By default (addlKeepsCov = FALSE) a bolus dose reads the record in force when it arrives, so a record at the dose's time or inside the lag window that carries another occasion's covariates changes the bioavailability", fixed = TRUE)
   expect_match(msg, "an infusion (rate = -1, rate = -2 or a fixed rate) reads its own record unless another record shares its dose time.", fixed = TRUE)
-  expect_match(msg, "addlKeepsCov = TRUE and nonmem = TRUE read the dose's own record for a bolus, which is NONMEM's pairing, but for an infusion they read the record before the dose or a record at the dose's time, not the dose's own record.", fixed = TRUE)
+  expect_match(msg, "addlKeepsCov = TRUE and nonmem = TRUE read the dose's own record for a bolus, which is NONMEM's pairing, but for an infusion they do not: a modelled rate reads the record before the dose or an observation at its time, and a fixed rate reads a record that depends on the layout of the table (the record at time 0, or one at or just after its arrival) and cannot be pinned to one.", fixed = TRUE)
   expect_match(msg, "Give every record the covariates of the dose that opened its interval, state addlKeepsCov = FALSE, and say in the article that you did.", fixed = TRUE)
   expect_match(msg, "TRUE or nonmem = TRUE also passes this check, but matches NONMEM only for bolus doses.", fixed = TRUE)
   # TRUE is not presented as NONMEM's behaviour in general, and the author is

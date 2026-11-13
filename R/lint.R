@@ -177,16 +177,25 @@
 #     addlKeepsCov = TRUE and nonmem = TRUE read the dose record's own
 #       covariates, which is NONMEM's pairing.
 #   infusion (rate = -2 with dur(), rate = -1 with rate(), or a fixed rate)
-#     TRUE and nonmem = TRUE never read the dose's own record. A fixed-rate
-#       infusion reads the record before the dose; rate = -1 and -2 read it
-#       too, unless a record shares the dose's time, which then supplies f()
-#       whatever the row order.
-#     FALSE reads the dose's own record for every infusion type, unless a record
-#       shares the dose's time: that record then supplies f(), whatever the row
-#       order. A record inside the lag window does not override it.
-#   modelled rate() and dur() (rate = -1 and -2): a record at the dose's time or
-#     inside the lag window supplies them under every setting, except under
-#     nonmem = TRUE when that record's row is written before the dose.
+#     TRUE and nonmem = TRUE never read the dose's own record.
+#       rate = -1 and -2 read the last record before the dose, or an
+#       observation at the dose's time, which then supplies f() whatever the
+#       row order.
+#       A fixed rate (rate > 0) reads a record that cannot be pinned to the
+#       dose or to its neighbours: with records at 0, 10, 20 and a dose at 24,
+#       f() came from the record at 0 (not the one at 20); with the first
+#       record at 5, 3 or 1 it came from the dose's own; with a record at the
+#       arrival time (24.5) or just after it (24.7, lag 0.5) it came from that
+#       record, and a record at 26 or 40 did not supply it.
+#     FALSE reads the dose's own record for every infusion type, unless an
+#       observation shares the dose's time: that record then supplies f(),
+#       whatever the row order. A record inside the lag window does not
+#       override it.
+#   a fixed duration (a dur column and no rate) reads like a bolus.
+#   modelled rate() and dur() (rate = -1 and -2): an observation at the dose's
+#     time or inside the lag window (not at the arrival time itself) supplies
+#     them under every setting, except under nonmem = TRUE when that record's
+#     row is written before the dose; a dose inside the window does not.
 # Without a lag every setting reads the dose's own record. What is right for
 # every dose type is an event table in which each record carries the covariates
 # of the dose that opened its interval, with addlKeepsCov = FALSE. The rule asks
@@ -1036,8 +1045,10 @@
                 "rate = -2 or a fixed rate) reads its own record unless another record ",
                 "shares its dose time. addlKeepsCov = TRUE and nonmem = TRUE read the ",
                 "dose's own record for a bolus, which is NONMEM's pairing, but for an ",
-                "infusion they read the record before the dose or a record at the ",
-                "dose's time, not the dose's own record. Give every record the ",
+                "infusion they do not: a modelled rate reads the record before the ",
+                "dose or an observation at its time, and a fixed rate reads a record ",
+                "that depends on the layout of the table (the record at time 0, or one ",
+                "at or just after its arrival) and cannot be pinned to one. Give every record the ",
                 "covariates of the dose that opened its interval, state ",
                 "addlKeepsCov = FALSE, and say in the article that you did. TRUE or ",
                 "nonmem = TRUE also passes this check, but matches NONMEM only for ",
@@ -1149,20 +1160,26 @@
 #' dose's own record, while `addlKeepsCov = TRUE` and `nonmem = TRUE` read the
 #' dose record's own covariates, which is NONMEM's pairing. For an infusion
 #' (`rate = -2` with `dur()`, `rate = -1` with `rate()`, or a fixed rate),
-#' `TRUE` and `nonmem = TRUE` never read the dose's own record: a fixed-rate
-#' infusion reads the record before the dose, and `rate = -1` and `-2` read it
-#' too unless a record shares the dose's time, which then supplies `f()`.
-#' `FALSE` reads the dose's own record for every infusion type unless a record
-#' shares the dose's time, which then supplies `f()` whatever the row order; a
-#' record inside the lag window does not override it. A modelled
-#' `rate()` or `dur()` comes from a record at the dose's time or inside the lag
-#' window under every setting, except under `nonmem = TRUE` when that record's
-#' row is written before the dose. Without a lag every setting reads the dose's
-#' own record. What is right for every dose type is an event table in which each
-#' record carries the covariates of the dose that opened its interval, with
-#' `addlKeepsCov = FALSE`; the rule accepts `TRUE` and `nonmem = TRUE` too, but
-#' they match NONMEM only for bolus doses. The rule checks that the setting is
-#' stated, not the event table.
+#' `TRUE` and `nonmem = TRUE` never read the dose's own record. `rate = -1` and
+#' `-2` read the last record before the dose, or an observation at the dose's
+#' time, which then supplies `f()`. A fixed rate (`rate` above 0) reads a record
+#' that cannot be pinned to the dose or its neighbours: with records at 0, 10
+#' and 20 and a dose at 24, `f()` came from the record at 0, not the one at 20;
+#' with the first record at 5, 3 or 1 it came from the dose's own record; a
+#' record at the arrival time (24.5) or just after it (24.7, lag 0.5) supplied
+#' it, and one at 26 or 40 did not. `FALSE` reads the dose's own record for
+#' every infusion type unless an observation shares the dose's time, which then
+#' supplies `f()` whatever the row order; a record inside the lag window does
+#' not override it. A fixed duration (a `dur` column, no `rate`) reads like a
+#' bolus. A modelled `rate()` or `dur()` comes from an observation at the dose's
+#' time or inside the lag window (not at the arrival time itself; a dose in the
+#' window does not supply it) under every setting, except under `nonmem = TRUE`
+#' when that record's row is written before the dose. Without a lag every
+#' setting reads the dose's own record. What is right for every dose type is an
+#' event table in which each record carries the covariates of the dose that
+#' opened its interval, with `addlKeepsCov = FALSE`; the rule accepts `TRUE` and
+#' `nonmem = TRUE` too, but they match NONMEM only for bolus doses. The rule
+#' checks that the setting is stated, not the event table.
 #'
 #' *What counts as a simulation.* `rxSolve()` in any spelling (`rxode2::`,
 #' `rxSolve.default`, native or magrittr pipes, arguments over several lines).
