@@ -70,7 +70,7 @@ test_that("the sandbox environment's parent is empty and it holds none of the na
 
 test_that("`::` returns a listed function and stops on any other", {
   skip_if_not_installed("dplyr")
-  expect_identical(.lintSandboxColon(dplyr, mutate), dplyr::mutate)
+  expect_identical(.lintSandboxColon(dplyr, mutate), getExportedValue("dplyr", "mutate"))
   expect_identical(.lintSandboxColon(stats, rnorm), stats::rnorm)
   expect_error(.lintSandboxColon(base, system), "`base::system` is not allowed")
   expect_error(.lintSandboxColon(rxode2, rxSolve), "`rxode2::rxSolve` is not allowed")
@@ -238,4 +238,44 @@ test_that("the names a statement binds follow R's assignment forms", {
   expect_identical(.lintBinds(quote(f <- function(a) { b <- a; b })), "f")
   expect_identical(.lintBinds(quote(local({ z <- 1 }))), character())
   expect_identical(.lintBinds(quote(print(x))), character())
+})
+
+test_that("a constant used as a function's default argument is found by the slice", {
+  expect_identical(.lintNames(quote(f(a, b = c))), c("f", "a", "c"))
+  expect_identical(.lintNames(quote(function(n = n_arm, m) n + m)), c("function", "n_arm", "+", "n", "m"))
+  expect_identical(.lintNames(quote(x[1, ])), c("[", "x"))
+  code <- c("n_arm <- 3", "unused <- 1", "mk <- function(n = n_arm) data.frame(id = seq_len(n))", "ev <- mk()")
+  expect_identical(slice_of(code, "ev"), c("n_arm <- 3", "mk <- function(n = n_arm) data.frame(id = seq_len(n))", "ev <- mk()"))
+  res <- sandbox(code[-2L][-3L], "mk()")
+  expect_identical(nrow(res$value), 3L)
+})
+
+# The sandbox has two layers: the check of the slice's calls before it runs, and
+# the environment it runs in. The second must hold on its own, so these evaluate
+# in the environment directly.
+test_that("the sandbox environment refuses what the pre-check would, without the pre-check", {
+  skip_if_not_installed("dplyr")
+  trace <- withr::local_tempfile(fileext = ".trace")
+  env <- new.env(parent = .lintSandboxEnv())
+  run <- function(code) tryCatch(eval(parse1(code), env), error = function(e) conditionMessage(e))
+  expect_match(run(sprintf("base::file.create('%s')", trace)), "`base::file.create` is not allowed", fixed = TRUE)
+  expect_match(run(sprintf("base:::file.create('%s')", trace)), "could not find function", fixed = TRUE)
+  expect_match(run("nlmixr2lib::readModelDb('x')"), "is not allowed", fixed = TRUE)
+  expect_match(run(sprintf("file.create('%s')", trace)), "could not find function", fixed = TRUE)
+  expect_match(run(sprintf("do.call('file.create', list('%s'))", trace)), "file.create", fixed = TRUE)
+  expect_match(run(sprintf("lapply('%s', 'file.create')", trace)), "file.create", fixed = TRUE)
+  expect_match(run(sprintf("sapply('%s', match.fun('file.create'))", trace)), "could not find function", fixed = TRUE)
+  expect_match(run("eval(quote(1))"), "could not find function", fixed = TRUE)
+  expect_false(file.exists(trace))
+  # what is allowed works the same way
+  expect_identical(run("dplyr::mutate"), getExportedValue("dplyr", "mutate"))
+  expect_identical(run("stats::rnorm"), stats::rnorm)
+  expect_identical(run("1 + 1"), 2)
+})
+
+test_that("the CLI script parses and names the pairing flag", {
+  script <- system.file("scripts", "lint_vignette.R", package = "nlmixr2libingest")
+  skip_if(!nzchar(script), "the scripts directory is not installed")
+  expect_no_error(parse(file = script))
+  expect_match(paste(readLines(script), collapse = "\n"), "--no-pairing", fixed = TRUE)
 })

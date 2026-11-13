@@ -1,13 +1,15 @@
 #!/usr/bin/env Rscript
-# lint_vignette.R -- CLI: static, pre-render lint of a validation vignette for
-# the common render-killers (oversized cohort, missing cmt= for an algebraic
-# observable, named-vector amt=, PKNCA time=0-dropping filter) and for a
-# simulation that does not state addlKeepsCov / nonmem = TRUE although the model
-# has alag() and an f() that depends on a covariate. Catches them BEFORE the
-# expensive render. Exit: 0 = clean, 1 = issues, 2 = usage error.
+# lint_vignette.R -- CLI: pre-render lint of a validation vignette for the
+# common render-killers (oversized cohort, missing cmt= for an algebraic
+# observable, named-vector amt=, PKNCA time=0-dropping filter), for a simulation
+# that does not state addlKeepsCov / nonmem = TRUE although the model has alag()
+# and an f() that depends on a covariate, and for an event table that gives a
+# lagged dose another record's covariates (this rule runs the code that builds
+# the event table in a sandbox; --no-pairing turns it off). Catches them BEFORE
+# the expensive render. Exit: 0 = clean, 1 = issues, 2 = usage error.
 #
 # Usage:
-#   Rscript lint_vignette.R <vignette.Rmd> [model] [--max-per-arm N]
+#   Rscript lint_vignette.R <vignette.Rmd> [model] [--max-per-arm N] [--no-pairing]
 #     <vignette.Rmd>   path to the validation vignette
 #     [model]          nlmixr2lib model name or path to its .R (enables the
 #                      algebraic-observable cmt= check and the lagged-dose
@@ -15,6 +17,8 @@
 #                      vignette passes to readModelDb(), and report a model
 #                      they cannot read)
 #     --max-per-arm N  per-arm simulation cap (default 200)
+#     --no-pairing     skip the lagged-dose pairing rule (it runs the article's
+#                      event-table code in a sandbox)
 
 args <- commandArgs(trailingOnly = TRUE)
 optval <- function(name, default = NULL) {
@@ -24,7 +28,7 @@ optval <- function(name, default = NULL) {
 pos <- args[!grepl("^--", args)]
 pos <- setdiff(pos, optval("--max-per-arm"))
 if (!length(pos) || !nzchar(pos[[1L]]) || !file.exists(pos[[1L]])) {
-  cat("usage: Rscript lint_vignette.R <vignette.Rmd> [model] [--max-per-arm N]\n")
+  cat("usage: Rscript lint_vignette.R <vignette.Rmd> [model] [--max-per-arm N] [--no-pairing]\n")
   quit(status = 2)
 }
 if (!requireNamespace("nlmixr2libingest", quietly = TRUE)) {
@@ -41,6 +45,7 @@ if (!is.null(model) && file.exists(model)) {
 mpa <- suppressWarnings(as.integer(optval("--max-per-arm", "200")))
 if (is.na(mpa)) mpa <- 200L
 
-res <- nlmixr2libingest::lint_vignette(rmd, model = model, max_per_arm = mpa)
+res <- nlmixr2libingest::lint_vignette(rmd, model = model, max_per_arm = mpa,
+                                       pairing = !"--no-pairing" %in% args)
 print(res)
 quit(status = if (res$n == 0L) 0L else 1L)

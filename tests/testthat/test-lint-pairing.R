@@ -689,6 +689,13 @@ test_that("a simulation in a helper function is checked through its calls", {
   expect_identical(pair_checks(res), "lagged-dose-pairing")
   msg <- res$issues$message[res$issues$check == "lagged-dose-pairing"]
   expect_match(msg, "1 of 4 lagged doses", fixed = TRUE)  # the second call: OCC 1 vs the record at 12.25 (window)
+  # a wrapper that forwards its `...` to the simulation: the events are the call's argument
+  fwd <- c(from_db, "run <- function(...) rxode2::rxSolve(mod, ..., addDosing = FALSE)", naive_table, "a <- run(ev)")
+  expect_identical(pair_checks(pair_lint(fwd)), "lagged-dose-pairing")
+  fwd_named <- c(from_db, "run <- function(...) rxode2::rxSolve(mod, ...)", naive_table, "a <- run(events = ev)")
+  expect_identical(pair_checks(pair_lint(fwd_named)), "lagged-dose-pairing")
+  fwd_all <- c(from_db, "run <- function(...) rxode2::rxSolve(...)", naive_table, "a <- run(mod, ev)")
+  expect_identical(pair_checks(pair_lint(fwd_all)), "lagged-dose-pairing")
   # `...` is passed through
   code <- c(from_db,
             "mk <- function(...) data.frame(id = 1, time = c(0, 12, 12), evid = c(1, 1, 0), amt = c(100, 100, NA),",
@@ -996,4 +1003,27 @@ test_that("the rule's known-answer cells agree with rxode2 for the measured layo
   # and one after it is not
   tbl <- mk(24.7, FALSE)
   expect_identical(oracle_supplier(models, tbl, 0.5, "f", "FALSE"), 3)
+})
+
+test_that("a simulation of another library model is not about the lagged dose", {
+  skip_if_not_installed("rxode2")
+  models <- list(list(label = "`A`", ui = rxode2::rxode2(make_pair_model(lag = "0.5"))))
+  article <- function(code) {
+    chunks <- .lintRchunks(write_article(code))
+    .lintScanSolves(chunks, "A")
+  }
+  # `er` was read from "B"; its simulation is skipped whatever its table is
+  scan <- article(c('mod <- readModelDb("A")', 'er <- readModelDb("B")', "ev <- stop('no')",
+                    "sim <- rxode2::rxSolve(er, ev)"))
+  expect_length(.lintPairing(scan, models), 0L)
+  # the same table solved with the lagged model is not
+  scan <- article(c('mod <- readModelDb("A")', 'er <- readModelDb("B")', "ev <- stop('no')",
+                    "sim <- rxode2::rxSolve(mod, ev)"))
+  expect_identical(vapply(.lintPairing(scan, models), function(i) i$check, ""), "lagged-dose-pairing-unverifiable")
+  # a model given as a function has no name to compare, so nothing is skipped
+  models_fn <- list(list(label = "the supplied model", ui = rxode2::rxode2(make_pair_model(lag = "0.5"))))
+  scan <- article(c('er <- readModelDb("B")', "ev <- stop('no')", "sim <- rxode2::rxSolve(er, ev)"))
+  expect_length(.lintPairing(scan, models_fn), 1L)
+  expect_identical(.lintLabelName("`A`"), "A")
+  expect_identical(.lintLabelName("the supplied model"), NA_character_)
 })

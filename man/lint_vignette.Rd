@@ -2,9 +2,14 @@
 % Please edit documentation in R/lint.R
 \name{lint_vignette}
 \alias{lint_vignette}
-\title{Statically pre-lint a validation vignette for common render-killers}
+\title{Pre-lint a validation vignette for common render-killers}
 \usage{
-lint_vignette(rmd, model = NULL, max_per_arm = 200L)
+lint_vignette(
+  rmd,
+  model = NULL,
+  max_per_arm = 200L,
+  pairing = getOption("nlmixr2libingest.lint_pairing", TRUE)
+)
 }
 \arguments{
 \item{rmd}{Path to the vignette \code{.Rmd}.}
@@ -15,6 +20,11 @@ to the names the vignette passes to \code{readModelDb()} or \code{modellib()} wh
 model is given.}
 
 \item{max_per_arm}{Maximum simulated participants per arm (default 200).}
+
+\item{pairing}{Whether to run the lagged-dose pairing rule, which runs the
+code that builds each simulation's event table in a sandbox (default \code{TRUE},
+or the option \code{nlmixr2libingest.lint_pairing}). \code{FALSE} leaves the other
+rules as they are.}
 }
 \value{
 An \code{nli_vignette_lint} list with \code{issues} (data frame) and \code{n}.
@@ -25,8 +35,11 @@ recurring failures that otherwise only surface during an expensive render:
 an oversized simulation cohort, a missing \verb{cmt =} for an algebraic
 observable (the most common slot-renumbering failure), a named-vector scalar
 passed to \verb{amt =}, a PKNCA input filter that drops the \code{time = 0} row,
-assertions that cannot hold across machines, and a simulation that does not
-state its lagged-dose covariate convention (see Details).
+assertions that cannot hold across machines, a simulation that does not
+state its lagged-dose covariate convention, and an event table that pairs a
+lagged dose with another record's covariates (see Details). All rules read
+the code without running it except the last, which runs the code that builds
+each event table in a sandbox (see \emph{Lagged-dose pairing}).
 }
 \details{
 \strong{What is read.} The R chunks of the Rmd, found as knitr finds them: an
@@ -172,4 +185,77 @@ reported like any other; stating \code{addlKeepsCov = FALSE} is the intended way
 to clear them. A wrapper that forwards \code{...} into \code{rxSolve()} is reported at
 its definition even when every caller states the setting, since the setting
 cannot be seen flowing through.
+
+\strong{Lagged-dose pairing.} For a model with an \code{alag()} compartment whose
+\code{f()}, \code{rate()} or \code{dur()} reads a covariate, the rule reads the event table
+each \code{rxSolve()} is given and reports (\code{lagged-dose-pairing}) every lagged
+dose for which a record the setting may read the covariates from carries
+different values than the dose's own record: the records are those in the
+table in \emph{Which setting} (a record at the dose's time, one inside the lag
+window, the record before the dose, ...), and a difference in any of them is
+reported, because which one wins depends on the dose type and the row order.
+The finding says how many lagged doses are affected and names one: its time
+and subject, the covariate, both values and the record. The setting is the
+one the call states as a literal (\code{addlKeepsCov}, \code{nonmem}, in an inline
+\code{rxControl()} or \code{control = list()}), \code{FALSE} when it states none, and all
+three when it cannot be read (a variable, \code{tieOrder}). The lag time of each
+dose is the model's \code{alag()} evaluated at the initial estimates, with every
+eta 0 and the dose record's covariates; when that cannot be computed only the
+records at the dose's own time are checked and the finding says so. A fixed
+rate under \code{TRUE} or \code{nonmem = TRUE} may read any record of the subject, so
+any difference is reported. The table that makes every \code{FALSE} setting clean
+is the one in \emph{Which setting}: each record carries the covariates of the dose
+that opened its interval.
+
+\emph{How the event table is obtained.} The code that builds it is run: the
+statements before the call that define what the events argument reads (found
+by name, so a statement that defines nothing needed is not run), the code
+before the call in the blocks, loops and function it is inside, the
+parameters of a helper function bound from its top-level calls (its defaults,
+\code{...}, and a helper handed to \code{lapply()} by name included), the first value
+of a loop variable and the first element of what \code{lapply()}, \code{purrr::map()},
+\code{Map()} or \code{purrr::pmap()} is applied to. It runs in a sandbox: the only
+functions it can find are the article's own and a fixed list from base, stats,
+utils, tibble, tidyr, purrr, dplyr and rxode2's event-table builders
+(\code{et()}, \code{add.dosing()}, ...), so a call to anything else (file access,
+\code{system()}, \code{eval()}, \code{readModelDb()}, \code{rxSolve()}, a model) is refused before
+anything runs, whatever spelling reaches it, and is reported as not
+verifiable. A run is limited to 20 seconds and 3 million rows, an article to
+20 simulations, and the session's random-number stream is put back
+afterwards. This guards an article's own code against its accidents; it is
+not a boundary against hostile code.
+
+\emph{Reported as not verifiable} (\code{lagged-dose-pairing-unverifiable}, one finding
+per reason naming the first simulation and counting the rest): an event table
+built with a call the sandbox does not run, which includes any dependence on
+the model object (\code{readModelDb()}, \code{rxode2()}, \code{zeroRe()}, \code{ui$omega}); a
+table with \code{addl} or steady-state (\code{ss}) doses; a table that is not a data
+frame or event table, has no numeric \code{time} column or is empty; a build that
+fails or runs over the limits; a simulation that is not an \code{rxSolve()} or
+\code{solve(model, ...)} call whose arguments can be read (\code{do.call()},
+\code{nlmixr2()}, \code{simulate()}); a helper the article never calls at the top level,
+or an anonymous function whose parameter is not one the rule binds; the model
+changed by \code{model()} in the article; and, with several models that have a
+lagged dose, a simulation whose model cannot be told. A simulation of another
+library model (read from a different literal name) is not about the lagged
+dose and is skipped.
+
+\emph{What it does not check.} Doses expanded by \code{addl}, because the pairing of an
+expanded dose was not measured. Next to another dose the measurements are
+partial (a bolus's \code{f()} and a dose into another compartment): a dose at the
+dose's time or inside the lag window is a candidate for every quantity and a
+dose at its time makes every later record a candidate for \code{rate()} and
+\code{dur()}. A loop or an apply-family function is run for its first element
+only. Etas are 0 in the lag time, so a lag longer than the dosing interval
+that only some subjects reach is not seen. The compartment of a numeric \code{cmt}
+is its position among the model's states. A covariate the table does not
+carry as a column (an \code{iCov}, a constant) cannot differ between records and
+is not compared.
+
+\emph{Over-approximations.} Every record a dose may read counts, so a table whose
+last-written record in the window carries the dose's own covariates is still
+reported when an earlier one in the window does not. A typical-value solve
+(\code{zeroRe()}) of a model whose covariate acts through an eta is reported
+although its effect is nil. Covariates that never change between occasions
+are never a difference, so they are not reported.
 }

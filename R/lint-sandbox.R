@@ -130,7 +130,7 @@
   "filter_at", "group_by_at", "transmute_at"
 )
 # rxode2's event-table builders; they construct a table and run nothing.
-.lintSandboxRxode2 <- c("et", "etRep", "etSeq", "etRbind", "etExpand")
+.lintSandboxRxode2 <- c("et", "etRep", "etSeq", "etRbind", "etExpand", "add.dosing", "add.sampling")
 
 .lintSandboxPackages <- list(
   base = c(.lintSandboxBase, .lintSandboxSyntax),
@@ -269,6 +269,17 @@
   unique(acc$out)
 }
 
+# Every name in an expression, function names and the default values of a
+# function's parameters included (all.names() skips the defaults, so a constant
+# used as `function(n = n_arm)` would not be found).
+.lintNames <- function(e) {
+  if (is.symbol(e)) return(as.character(e))
+  if (is.call(e) || is.pairlist(e)) {
+    return(unique(unlist(lapply(.lintKids(e), .lintNames), use.names = FALSE)))
+  }
+  character()
+}
+
 # Names a statement reads, function names included, so that a helper the code
 # calls is pulled into the slice with the variables it reads.
 .lintReads <- function(x) {
@@ -276,9 +287,9 @@
   # (`x$a <- value`, `names(x) <- value`) reads its target too.
   if (is.call(x) && is.symbol(x[[1L]]) && as.character(x[[1L]]) %in% c("<-", "=") &&
       length(x) == 3L && is.symbol(x[[2L]])) {
-    return(unique(all.names(x[[3L]])))
+    return(.lintNames(x[[3L]]))
   }
-  unique(all.names(x))
+  .lintNames(x)
 }
 
 # Whether a statement rebinds `nm` without reading it: `nm <- <expression
@@ -286,7 +297,7 @@
 .lintKills <- function(x, nm) {
   is.call(x) && is.symbol(x[[1L]]) && as.character(x[[1L]]) %in% c("<-", "=") &&
     length(x) == 3L && is.symbol(x[[2L]]) && identical(as.character(x[[2L]]), nm) &&
-    !nm %in% all.names(x[[3L]])
+    !nm %in% .lintNames(x[[3L]])
 }
 
 # The statements before position `top` that `wanted` (an expression) depends on,

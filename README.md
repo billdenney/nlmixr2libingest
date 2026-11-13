@@ -64,7 +64,7 @@ API — but never reimplements model **validation**, which stays in
   deliberately *without* the whole-package check), and `full` (adds the
   whole-package R CMD check — the pre-commit gate). CLI: `inst/scripts/validate.R`
   (`--model` / `--full`; exit 0 = success, 1 = issues).
-- **Vignette pre-lint** — `lint_vignette()` statically scans a validation
+- **Vignette pre-lint** — `lint_vignette()` scans a validation
   vignette for the common render-killers (a `cmt =` referencing an algebraic
   observable, a named-vector character subscript to `amt =`, a PKNCA
   `time = 0`-dropping filter, a simulated cohort over the per-arm cap) *before*
@@ -77,7 +77,11 @@ API — but never reimplements model **validation**, which stays in
   the dose that opened its interval; `TRUE` and `nonmem = TRUE` match NONMEM
   only for bolus doses). That rule resolves or reports every
   form it can read -- simulations it cannot trace are reported as not
-  verifiable -- and lists what it cannot in `?lint_vignette`. The text rules
+  verifiable -- and lists what it cannot in `?lint_vignette`. A second rule
+  runs the code that builds each simulation's event table, in a sandbox that
+  allows only pure functions (no file, process, model or solver access), and
+  reports the lagged doses whose covariates the solver would take from another
+  record (`pairing = FALSE` turns it off). The text rules
   ignore comments, and the `cmt =` and lagged-dose rules read the model named by
   the `model` argument or, failing that, by the article's own `readModelDb()`
   calls, and report a model they cannot read. The rules are best-effort

@@ -442,9 +442,8 @@
       extra <- args[nms != "" & !nms %in% c("X", ".x", ".l", "FUN", ".f")]
       if (!length(pos)) pos <- args[nms %in% c("X", ".x")]
       if (length(pos)) {
-        first <- call("[[", call("(", pos[[1L]]), 1L)
         acc$found[[length(acc$found) + 1L]] <- list(
-          call = as.call(c(list(as.name(fun), first), extra)), top = top)
+          call = as.call(c(list(as.name(fun), .lintFirstOf(pos[[1L]])), extra)), top = top)
       }
     }
   }
@@ -523,7 +522,7 @@
     if (identical(fr$kind, "block")) {
       stmts <- c(stmts, fr$before)
     } else if (identical(fr$kind, "for")) {
-      stmts[[length(stmts) + 1L]] <- call("<-", as.name(fr$var), call("[[", call("(", fr$over), 1L))
+      stmts[[length(stmts) + 1L]] <- call("<-", as.name(fr$var), .lintFirstOf(fr$over))
     } else if (identical(fr$kind, "lambda")) {
       bound <- .lintLambdaBindings(fr$params, fr$apply)
       stmts <- c(stmts, bound)
@@ -532,6 +531,9 @@
   }
   list(stmts = stmts, lambda = lambda)
 }
+
+# `(x)[[1L]]`, the first element of what an expression evaluates to.
+.lintFirstOf <- function(x) call("[[", call("(", x), 1L)
 
 # The parameters of an anonymous function handed to an apply-family call, bound
 # to the first element of what it is applied to: `p <- (X)[[1]]` for lapply() and
@@ -546,7 +548,6 @@
   pos <- ap$args[nms == ""]
   if (!length(pos)) pos <- ap$args[nms %in% c("X", ".x", ".l")]
   if (!length(pos)) return(list())
-  first <- function(x) call("[[", call("(", x), 1L)
   if (grepl("^(pmap|pwalk)", ap$fn)) {
     lst <- pos[[1L]]
     return(lapply(seq_along(params), function(k) {
@@ -557,9 +558,9 @@
   }
   if (ap$fn %in% c("Map", "mapply") || grepl("^(map2|walk2|imap)", ap$fn)) {
     k <- min(length(params), length(pos))
-    return(lapply(seq_len(k), function(i) call("<-", as.name(params[[i]]), first(pos[[i]]))))
+    return(lapply(seq_len(k), function(i) call("<-", as.name(params[[i]]), .lintFirstOf(pos[[i]]))))
   }
-  list(call("<-", as.name(params[[1L]]), first(pos[[1L]])))
+  list(call("<-", as.name(params[[1L]]), .lintFirstOf(pos[[1L]])))
 }
 
 # What a simulation call is given as events, as a list of targets. Each has the
@@ -603,7 +604,15 @@
     use <- cands
     if (length(bound$dots) || "..." %in% names(fun$formals)) {
       extra <- lapply(extra, .lintSubstituteDots, dots = bound$dots)
-      use <- lapply(cands, .lintSubstituteDots, dots = bound$dots)
+      # an argument that is `...` itself stands for the call's extra arguments
+      # (`events =` or unnamed ones)
+      dnm <- names(bound$dots)
+      if (is.null(dnm)) dnm <- rep("", length(bound$dots))
+      spliced <- bound$dots[dnm %in% c("", "events")]
+      use <- unlist(lapply(cands, function(cd) {
+        if (identical(cd, quote(...))) spliced else list(.lintSubstituteDots(cd, bound$dots))
+      }), recursive = FALSE)
+      if (is.null(use)) use <- list()
     }
     list(cands = use, base = cl$top, extra = extra, lambda = fs$lambda, uncalled = FALSE)
   })
@@ -632,6 +641,10 @@
   flat <- c(scan$exprs[seq_len(target$base - 1L)], target$extra)
   first_reason <- NULL
   for (cand in target$cands) {
+    if (identical(cand, quote(...))) {
+      if (is.null(first_reason)) first_reason <- "its events are passed through `...` and the function is not called with them"
+      next
+    }
     stmts <- .lintSlice(flat, length(flat) + 1L, cand)
     run <- .lintSandboxRun(stmts, cand, wl = wl)
     if (!run$ok) {
@@ -642,6 +655,12 @@
     if (is.null(first_reason)) first_reason <- "the events argument is not a data frame or event table"
   }
   list(ok = FALSE, reason = .lintTargetReason(first_reason, target))
+}
+
+# The library name a model label stands for, or NA when the model was supplied
+# as a function or an rxUi (the label is then "the supplied model").
+.lintLabelName <- function(label) {
+  if (grepl("^`.*`$", label)) substr(label, 2L, nchar(label) - 1L) else NA_character_
 }
 
 # Which model a simulation uses, among the article's models that have a lagged
@@ -723,8 +742,12 @@
   iss <- list()
   unver <- new.env(parent = emptyenv())
   run <- 0L
+  spec_names <- vapply(specs, function(sp) .lintLabelName(sp$label), "")
   for (site in scan$sites) {
     text <- site$text
+    # a simulation of another library model is not about a lagged dose here: the
+    # model it solves was read from a literal name that none of the lagged models has
+    if (!is.na(site$origin) && !anyNA(spec_names) && !site$origin %in% spec_names) next
     if (!identical(site$kind, "rxSolve") || is.null(site$call)) {
       .lintNoteUnverifiable(unver, if (identical(site$kind, "rxSolve")) {
         "it is made inside a function, so its event table depends on the function's arguments"

@@ -1102,15 +1102,18 @@
   iss
 }
 
-#' Statically pre-lint a validation vignette for common render-killers
+#' Pre-lint a validation vignette for common render-killers
 #'
 #' Scans the vignette's R chunks (and, when supplied, the model) for the
 #' recurring failures that otherwise only surface during an expensive render:
 #' an oversized simulation cohort, a missing `cmt =` for an algebraic
 #' observable (the most common slot-renumbering failure), a named-vector scalar
 #' passed to `amt =`, a PKNCA input filter that drops the `time = 0` row,
-#' assertions that cannot hold across machines, and a simulation that does not
-#' state its lagged-dose covariate convention (see Details).
+#' assertions that cannot hold across machines, a simulation that does not
+#' state its lagged-dose covariate convention, and an event table that pairs a
+#' lagged dose with another record's covariates (see Details). All rules read
+#' the code without running it except the last, which runs the code that builds
+#' each event table in a sandbox (see *Lagged-dose pairing*).
 #'
 #' @details
 #' **What is read.** The R chunks of the Rmd, found as knitr finds them: an
@@ -1257,12 +1260,89 @@
 #' its definition even when every caller states the setting, since the setting
 #' cannot be seen flowing through.
 #'
+#' **Lagged-dose pairing.** For a model with an `alag()` compartment whose
+#' `f()`, `rate()` or `dur()` reads a covariate, the rule reads the event table
+#' each `rxSolve()` is given and reports (`lagged-dose-pairing`) every lagged
+#' dose for which a record the setting may read the covariates from carries
+#' different values than the dose's own record: the records are those in the
+#' table in *Which setting* (a record at the dose's time, one inside the lag
+#' window, the record before the dose, ...), and a difference in any of them is
+#' reported, because which one wins depends on the dose type and the row order.
+#' The finding says how many lagged doses are affected and names one: its time
+#' and subject, the covariate, both values and the record. The setting is the
+#' one the call states as a literal (`addlKeepsCov`, `nonmem`, in an inline
+#' `rxControl()` or `control = list()`), `FALSE` when it states none, and all
+#' three when it cannot be read (a variable, `tieOrder`). The lag time of each
+#' dose is the model's `alag()` evaluated at the initial estimates, with every
+#' eta 0 and the dose record's covariates; when that cannot be computed only the
+#' records at the dose's own time are checked and the finding says so. A fixed
+#' rate under `TRUE` or `nonmem = TRUE` may read any record of the subject, so
+#' any difference is reported. The table that makes every `FALSE` setting clean
+#' is the one in *Which setting*: each record carries the covariates of the dose
+#' that opened its interval.
+#'
+#' *How the event table is obtained.* The code that builds it is run: the
+#' statements before the call that define what the events argument reads (found
+#' by name, so a statement that defines nothing needed is not run), the code
+#' before the call in the blocks, loops and function it is inside, the
+#' parameters of a helper function bound from its top-level calls (its defaults,
+#' `...`, and a helper handed to `lapply()` by name included), the first value
+#' of a loop variable and the first element of what `lapply()`, `purrr::map()`,
+#' `Map()` or `purrr::pmap()` is applied to. It runs in a sandbox: the only
+#' functions it can find are the article's own and a fixed list from base, stats,
+#' utils, tibble, tidyr, purrr, dplyr and rxode2's event-table builders
+#' (`et()`, `add.dosing()`, ...), so a call to anything else (file access,
+#' `system()`, `eval()`, `readModelDb()`, `rxSolve()`, a model) is refused before
+#' anything runs, whatever spelling reaches it, and is reported as not
+#' verifiable. A run is limited to 20 seconds and 3 million rows, an article to
+#' 20 simulations, and the session's random-number stream is put back
+#' afterwards. This guards an article's own code against its accidents; it is
+#' not a boundary against hostile code.
+#'
+#' *Reported as not verifiable* (`lagged-dose-pairing-unverifiable`, one finding
+#' per reason naming the first simulation and counting the rest): an event table
+#' built with a call the sandbox does not run, which includes any dependence on
+#' the model object (`readModelDb()`, `rxode2()`, `zeroRe()`, `ui$omega`); a
+#' table with `addl` or steady-state (`ss`) doses; a table that is not a data
+#' frame or event table, has no numeric `time` column or is empty; a build that
+#' fails or runs over the limits; a simulation that is not an `rxSolve()` or
+#' `solve(model, ...)` call whose arguments can be read (`do.call()`,
+#' `nlmixr2()`, `simulate()`); a helper the article never calls at the top level,
+#' or an anonymous function whose parameter is not one the rule binds; the model
+#' changed by `model()` in the article; and, with several models that have a
+#' lagged dose, a simulation whose model cannot be told. A simulation of another
+#' library model (read from a different literal name) is not about the lagged
+#' dose and is skipped.
+#'
+#' *What it does not check.* Doses expanded by `addl`, because the pairing of an
+#' expanded dose was not measured. Next to another dose the measurements are
+#' partial (a bolus's `f()` and a dose into another compartment): a dose at the
+#' dose's time or inside the lag window is a candidate for every quantity and a
+#' dose at its time makes every later record a candidate for `rate()` and
+#' `dur()`. A loop or an apply-family function is run for its first element
+#' only. Etas are 0 in the lag time, so a lag longer than the dosing interval
+#' that only some subjects reach is not seen. The compartment of a numeric `cmt`
+#' is its position among the model's states. A covariate the table does not
+#' carry as a column (an `iCov`, a constant) cannot differ between records and
+#' is not compared.
+#'
+#' *Over-approximations.* Every record a dose may read counts, so a table whose
+#' last-written record in the window carries the dose's own covariates is still
+#' reported when an earlier one in the window does not. A typical-value solve
+#' (`zeroRe()`) of a model whose covariate acts through an eta is reported
+#' although its effect is nil. Covariates that never change between occasions
+#' are never a difference, so they are not reported.
+#'
 #' @param rmd Path to the vignette `.Rmd`.
 #' @param model Optional `rxUi` / model function / `nlmixr2lib` name; enables the
 #'   algebraic-observable `cmt =` check and the lagged-dose check. Both fall back
 #'   to the names the vignette passes to `readModelDb()` or `modellib()` when no
 #'   model is given.
 #' @param max_per_arm Maximum simulated participants per arm (default 200).
+#' @param pairing Whether to run the lagged-dose pairing rule, which runs the
+#'   code that builds each simulation's event table in a sandbox (default `TRUE`,
+#'   or the option `nlmixr2libingest.lint_pairing`). `FALSE` leaves the other
+#'   rules as they are.
 #' @return An `nli_vignette_lint` list with `issues` (data frame) and `n`.
 #' @export
 lint_vignette <- function(rmd, model = NULL, max_per_arm = 200L,
